@@ -5,9 +5,9 @@
 scattering matrix `S` at frequences `k` on `channels`
 """
 function smatrix(sim::Simulation, k; is_linear=true, F=[1], disp_opt=true, file_name="",
-                    num_wg_bands=15, num_bloch=17, num_free_bands=2)
+                    num_wg_bands_multiplier=1.8, num_bloch=17, num_free_bands=2)
 
-    build_dispersion!(sim; num_wg_bands=num_wg_bands, num_bloch=num_bloch, num_free_bands=num_free_bands)
+    build_dispersions!(sim; num_wg_bands_multiplier=num_wg_bands_multiplier, num_bloch=num_bloch, num_free_bands=num_free_bands)
 
     S, scattered_flux, total_flux, absorption = smatrix_l(sim, k, 1:length(sim.sct.channels), F, disp_opt, file_name)
 
@@ -71,6 +71,21 @@ function smatrix_l(sim::Simulation, k, channels, F, disp_opt, file_name)
 
     return S, flux_sct, flux_tot, absorption
 end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
