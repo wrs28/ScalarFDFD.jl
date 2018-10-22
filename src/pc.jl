@@ -9,7 +9,7 @@ falls within the cell defined by `lattice`
 """
 function build_pc_domain(lattice::Bravais, domain::Domain)
     return build_pc_domain(lattice, Regions=Regions(domain);
-                    is_in_domain=domain.is_in_domain, domain_params=domain.domain_params,
+                    is_in_domain=whole_domain, domain_params=domain.domain_params,
                     n₁=domain.n₁, n₂=domain.n₂, F=domain.F)
 end
 function build_pc_domain(lattice::Bravais, regions::Regions=Regions();
