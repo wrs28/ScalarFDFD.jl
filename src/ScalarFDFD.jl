@@ -31,7 +31,7 @@ TwoLevelSystem,
 Simulation,
 extract_waveguide_simulation
 
-# Eigenvalue Solvers
+# Eigenvalue Solvers, all checked in 1d (except β)
 export eig_k,
 eig_cf,
 eig_β, # did not check, want to revisit this solution
@@ -44,18 +44,20 @@ bulk_absorption, # fails unitarity
 smatrix #fails unitarity
 
 # Band Structure
-export band_structure,
-build_dispersion!,
-remove_dispersion!,
+export band_structure
+
+# Waveguide Dispersions
+export build_dispersions!,
+remove_dispersions!,
 waveguide_dispersion
 
-# Plotting and Animation
+# Plotting and Animation # 1d checked
 export wave
 
 # Parallel
 export eig_kp,
 band_structure_p,
-build_dispersion_p!,
+build_dispersions_p!,
 waveguide_dispersion_p,
 smatrix_p
 
@@ -64,25 +66,34 @@ export Regions,
 build_domain,
 add_regions,
 add_region,
-add_circle,
+add_circle_region,
+add_circle_domain,
 add_ellipse,
 add_square,
-add_rectangle,
-add_parallelogram,
-build_pc,
+add_rectangle_region,
+add_rectangle_domain,
+add_parallelogram
+
+export build_pc_domain,
+defect_domain,
 add_defect,
-add_line_defect,
-add_circle,
-planar_waveguide, #not checked, don't care for now
-add_planar_waveguide, #not checked, don't care for now
-defect_waveguide, #not checked, don't care for now
-add_defect_waveguide #not checked, don't care for now
+line_defect_domain,
+add_circle_to_pc
+
+export add_planar_waveguide,
+add_planar_waveguides,
+add_horizontal_planar_waveguides,
+add_vertical_planar_waveguides, #not checked, don't care for now
+add_halfspace_waveguide,
+add_halfspace_waveguides,
+add_pc_waveguide #not checked, don't care for now
 
 
 # Simulation Definitions
 include("defaults.jl")
 include("definitions.jl")
 include("expanded definitions.jl")
+include("iss.jl")
 include("bravais.jl")
 include("simulation construction.jl")
 include("differential_operators.jl")
@@ -97,6 +108,7 @@ include("quadrature.jl")
 # Scattering Solvers
 include("scattering.jl")
 include("sources.jl")
+include("dispersions.jl")
 include("analysis.jl")
 include("smatrix.jl")
 
@@ -111,9 +123,9 @@ include("plot.jl")
 include("parallel.jl")
 
 # Front-end Simulation Construction
-include("shapes.jl")
 include("construction_framework.jl")
-include("constructors.jl")
+include("shapes.jl")
+include("shape_constructors.jl")
 include("pc.jl")
 include("waveguides.jl")
 
