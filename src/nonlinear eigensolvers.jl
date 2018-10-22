@@ -12,10 +12,10 @@ eigenfrequency `k` with dispersion via root-finding of `η(k) - D₀γ(k)`.
 `max_count`: the max number of CF states to compute at a time.
 `max_iter`: maximum number of iterations to include in nonlinear solve
 """
-function eig_knl(sim::Simulation, k_init::Number, η_init=0, ka=0, kb=0, F=[1], u_init=[],
-    k_avoid=[0], disp_opt=false, tol=.5, max_count=15, max_iter=50)
+function eig_knl(sim::Simulation, k_init::Number, η_init::Number, ka::Number, kb::Number, F::Array, u_init::Array,
+    k_avoid=[0], disp_opt::Bool=false, tol::Float64=.5, max_count::Int=15, max_iter::Int=50)
 
-    ηt, ut = eig_cf(sim, k_init, 1, η_init, ka, kb, u_init)
+    ηt, ut = eig_cf(sim, k_init, 1, η_init, ka, kb, F, u_init)
 
     γp = sim.tls.γp; k₀ = sim.tls.k₀; D₀ = sim.tls.D₀; dx = sim.dis.dx
     function f!(fvec,z)
@@ -28,7 +28,7 @@ function eig_knl(sim::Simulation, k_init::Number, η_init=0, ka=0, kb=0, F=[1], 
         ind = Int
 
         while flag
-            η_temp, u_temp = eig_cf(sim, k, M, ka, kb, ηt[1], F, ut[:,1])
+            η_temp, u_temp = eig_cf(sim, k, M, ηt[1], ka, kb, F, ut[:,1])
             overlap = zeros(Float64,M)
             for i ∈ eachindex(overlap)
                 overlap[i] = abs(quadrature(sim,ut[:,1].*sim.sys.F[:].*F.*u_temp[:,i]))
@@ -57,7 +57,7 @@ function eig_knl(sim::Simulation, k_init::Number, η_init=0, ka=0, kb=0, F=[1], 
     conv = converged(z)
 
     ηt[1] = D₀*γ(sim,k)
-    η, ψ = eig_cf(sim, k, 1, ka, kb, F, ηt[1], ut[:,1])
+    η, ψ = eig_cf(sim, k, 1, ηt[1], ka, kb, F, ut[:,1])
 
     if !conv
         warn("no convergence for frequency $(k[1])")
@@ -78,7 +78,7 @@ Contour is centered on `k`, `radii` = [real radius, imag radius].
 
 `Nq` is the number of contour quadrature points.
 """
-function eig_knl(sim::Simulation, k::Number, nk::Int, radii, ka=0, kb=0, F=[1], Nq=100, rank_tol=1e-8, r_min=.01)
+function eig_knl(sim::Simulation, k::Number, nk::Int, radii::Union{Tuple,Array}, ka::Number, kb::Number, F::Array, Nq::Int, rank_tol::Float64, r_min::Float64)
 
     ∇² = laplacian(sim, k; ka=ka, kb=kb)
 
