@@ -27,8 +27,7 @@ Note: use build_dispersions! for more control over the dispersion-building proce
 """
 function scattering(sim::Simulation, k, a;
         H=lu(sparse(complex(1.,0)*I,1,1)),
-        F=[1], file_name="", is_linear=true, ψ_init=[], ftol=2e-8,
-        iter=150, num_wg_bands_multiplier=1.8, num_bloch=17)
+        F=[1], file_name="", is_linear=true, ψ_init=[], ftol=2e-8, iter=150)
 
     if length(a) < length(sim.sct.channels)
         throw(ArgumentError("number of input amplitudes $(length(a)) less than the number of input channels $(length(sim.sct.channels))"))
@@ -36,10 +35,10 @@ function scattering(sim::Simulation, k, a;
         @warn "number of input amplitudes $(length(a)) greater than the number of input channels $(length(sim.sct.channels)), will ignore last $(length(a)-length(sim.sct.channels)) amplitudes"
     end
 
-    build_dispersion!(sim; num_wg_bands_multiplier=num_wg_bands_multiplier, num_bloch=num_bloch)
+    build_dispersions!(sim)
 
     # if is_linear
-        ψ, (φ₊₋, φ₊, φ₋, H) = scattering_l(sim, k, a, H, F)
+        ψ, φ₊₋, φ₊, φ₋, H = scattering_l(sim, k, a, H, F)
     # else
         # ψ, (φ₊₋, φ₊, φ₋, H) = scattering_nl(sim, k, a, H, F, disp_opt=disp_opt, ψ_init=ψ_init, ftol=ftol, iter=iter)
     # end
@@ -59,12 +58,12 @@ end
 
 
 function scattering_l(sim::Simulation, k, a, H, F)
-    j, φ₊₋, φ₊, φ₋ = synthesize_source(sim, k, a)
+    j, φ₊₋, φ₊, φ₋ = ScalarFDFD.synthesize_source(sim, k, a)
     if (H.m == H.n == 1)
-        H = factorize_scattering_operator(sim,k,F)
+        H = ScalarFDFD.factorize_scattering_operator(sim,k,F)
     end
     ψ = H\j
-    return ψ, (φ₊₋, φ₊, φ₋, H)
+    return ψ, φ₊₋, φ₊, φ₋, H
 end
 
 
@@ -85,6 +84,14 @@ function factorize_scattering_operator(sim::Simulation, k, F)
         reset_bl!(sim, bl_original)
     end
 end
+
+
+
+
+
+
+
+
 
 
 
