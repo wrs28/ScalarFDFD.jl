@@ -25,9 +25,17 @@ Base.show(io::IO, sys::System) = begin
     if !get(io, :sub, false)
         print(io, typeof(sys), " with ", length(sys.domains), " domains: \n")
     end
-    domain_string = [["\tdomain ", i, " type: ", sys.domains[i].domain_type, "\n"] for i ∈ eachindex(sys.domains)]
+    domain_string = [["\tdomain ", i, " type: ", sys.domains[i].domain_type] for i ∈ eachindex(sys.domains)]
+    asymptote_string = [[", ", sys.domains[i].which_asymptote] for i ∈ eachindex(sys.domains)]
+    waveguide_string = [[", waveguide ", sys.domains[i].which_waveguide, "\n"] for i ∈ eachindex(sys.domains)]
     for i ∈ eachindex(sys.domains)
         print(io, domain_string[i]...)
+        if sys.domains[i].which_asymptote !== :none
+            print(io, asymptote_string[i]...)
+            print(io, waveguide_string[i]...)
+        else
+            print(io, "\n")
+        end
     end
     for i ∈ eachindex(sys.waveguides)
         if i==1
@@ -107,9 +115,11 @@ Base.show(io::IO, chn::Channels) = begin
         print(io, "\twaveguide: ", chn.waveguide, "\n",
         "\tquantum number: ", chn.quantum_number, "\n")
         if !isempty(chn.dispersion)
-            dispersion_plot = lineplot(x->chn.dispersion[1](x), 0:.01:2π, canvas=BlockCanvas, color=:yellow, title="Dispersion", name="channel", ylim=[chn.gaps[1][1]-.1, chn.gaps[1][2]+.1]);
-            lineplot!(dispersion_plot, chn.gaps[1][1], 0, color=:white);
-            lineplot!(dispersion_plot, chn.gaps[1][2], 0, color=:white);
+            dispersion_plot = lineplot(x->chn.dispersion[1](x), 0:.01:2π, canvas=BlockCanvas, color=:yellow, title="Dispersion", name="channel");
+            for j ∈ eachindex(chn.gaps)
+                lineplot!(dispersion_plot, chn.gaps[1][1], 0, color=:white);
+                lineplot!(dispersion_plot, chn.gaps[1][2], 0, color=:white);
+            end
             println(dispersion_plot)
         end
     end
@@ -125,7 +135,7 @@ Base.show(io::IO, sct::Scattering) = begin
     end
     temp = [["\n", sct.channels[i]] for i ∈ eachindex(sct.channels)]
     if plot_flag && !isempty(sct.channels) && !isempty(sct.channels[1].dispersion)
-        dispersion_plot = lineplot(x->sct.channels[1].dispersion[1](x), 0:.01:2π, canvas=BlockCanvas, title="Dispersion", name="channel 1", ylim=[sct.channels[1].gaps[1][1]-.1, sct.channels[1].gaps[1][2]+.1])
+        dispersion_plot = lineplot(x->sct.channels[1].dispersion[1](x), sct.channels[1].dispersion[1].ranges[1][1], sct.channels[1].dispersion[1].ranges[1][end], canvas=BlockCanvas, title="Dispersion", name="channel 1")
     end
     for i ∈ eachindex(temp)
         if i>1
@@ -136,10 +146,12 @@ Base.show(io::IO, sct::Scattering) = begin
         if plot_flag
             if !isempty(sct.channels[i].dispersion)
                 if i>1
-                    lineplot!(dispersion_plot,x->sct.channels[i].dispersion[1](x), 0:.01:2π, name="channel $i");
+                    lineplot!(dispersion_plot,x->sct.channels[i].dispersion[1](x), sct.channels[i].dispersion[1].ranges[1][1], sct.channels[i].dispersion[1].ranges[1][end], name="channel $i");
                 end
-                lineplot!(dispersion_plot, sct.channels[i].gaps[1][1], 0, color=:white);
-                lineplot!(dispersion_plot, sct.channels[i].gaps[1][2], 0, color=:white);
+                for j ∈ eachindex(sct.channels[i].gaps)
+                    lineplot!(dispersion_plot, [0,1], fill(sct.channels[i].gaps[1][1],2), color=:white);
+                    lineplot!(dispersion_plot, sct.channels[i].gaps[1][2], 0, color=:white);
+                end
             end
         end
     end
