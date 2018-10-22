@@ -18,11 +18,17 @@ Zone specification is
 
 Except for reduced, each zone is defined by (_ ↑ ←, ↗ ↓ ↖)
 """
-function band_structure(sim::Simulation, num_bloch::Int; num_bands=5, zone=:half, parallel=nprocs()>1, interpolation=:cubic, calc_type="band structure ")
+function band_structure(sim::Simulation, num_bloch::Int; num_bands=5, zone=:half,
+        parallel=nprocs()>1, interpolation=:cubic, calc_type="band structure ",
+        disp_opt=true)
 
     k_paths, zones, order = band_paths(sim, num_bloch, zone)
     bands = Array{Array{Array{Array{Float64,2},1},1},1}(undef, length(zones))
-    pg = Progress(length(zones)*length(zones[1])*3*num_bloch, PROGRESS_UPDATE_TIME::Float64, calc_type)
+    if disp_opt
+        pg = Progress(length(zones)*length(zones[1])*3*num_bloch, PROGRESS_UPDATE_TIME::Float64, calc_type)
+    else
+        pg = nothing
+    end
     for i ∈ eachindex(bands)
         bands[i] = Array{Array{Array{Float64,2},1},1}(undef, length(zones[i]))
         for j ∈ eachindex(zones[i])
@@ -49,7 +55,9 @@ end
 band structure as full surface over zone specified by `zone`, which must be one of
 :reduced, :half, :full.
 """
-function band_structure(sim::Simulation, num_bloch::Array{Int,1}; num_bands=5, zone=:half, parallel=nprocs()>1, calc_type="band structure ", interpolation=nothing, line=nothing)
+function band_structure(sim::Simulation, num_bloch::Array{Int,1}; num_bands=5, zone=:half,
+    parallel=nprocs()>1, calc_type="band structure ", disp_opt=true, interpolation=nothing,
+    line=nothing)
 
     if length(num_bloch)==1
         num_bloch = fill(num_bloch[1],2)
@@ -75,10 +83,15 @@ function band_structure(sim::Simulation, num_bloch::Array{Int,1}; num_bands=5, z
         kb[i] = KAB[i][2]
     end
 
-    if parallel
-        bands = bands_only_p(sim, (ka, kb), num_bands, Progress(prod(size(ka)), PROGRESS_UPDATE_TIME::Float64, calc_type))
+    if disp_opt
+        pg = Progress(prod(size(ka)), PROGRESS_UPDATE_TIME::Float64, calc_type)
     else
-        bands = bands_only(sim, (ka, kb), num_bands, Progress(prod(size(ka)), PROGRESS_UPDATE_TIME::Float64, calc_type))
+        pg = nothing
+    end
+    if parallel
+        bands = bands_only_p(sim, (ka, kb), num_bands, pg)
+    else
+        bands = bands_only(sim, (ka, kb), num_bands, pg)
     end
     gaps, bands_itp = find_gaps([[[real(bands)]]], interpolation)
 
@@ -90,8 +103,11 @@ function band_structure(sim::Simulation, k_bloch::Tuple{AbstractArray{S,M},Abstr
     num_bands=5, parallel=nprocs()>1, interpolation=:cubic,
     calc_type = "band structure ",
     pg::Progress=Progress(prod(size(k_bloch[1])), PROGRESS_UPDATE_TIME::Float64, calc_type)
-    ) where S where T where M
+    disp_opt=true) where S where T where M
 
+    if !disp_opt
+        pg = nothing
+    end
     if parallel
         bands = real(bands_only_p(sim, k_bloch, num_bands, pg))
     else
@@ -108,10 +124,14 @@ end
 
 bands and gaps of photonic crystal that defines background of `waveguide`
 """
-function band_structure(sim::Simulation; waveguide, num_bloch=17, num_bands=5, parallel=nprocs()>1, interpolation=:cubic, zone=:half)
+function band_structure(sim::Simulation; waveguide, num_bloch=17, num_bands=5,
+    parallel=nprocs()>1, interpolation=:cubic, zone=:half, disp_opt=true)
+
     wg_sim = extract_waveguide_simulation(sim, waveguide)
     pc_sim = Simulation(2, wg_sim)
-    bands, gaps = band_structure(pc_sim, num_bloch; num_bands=num_bands, parallel=parallel, interpolation=interpolation, zone=zone, calc_type="waveguide band structure ")
+    bands, gaps = band_structure(pc_sim, num_bloch; num_bands=num_bands,
+        parallel=parallel, interpolation=interpolation, zone=zone,
+        calc_type="waveguide band structure ", disp_opt=disp_opt)
     return bands, gaps
 end
 
@@ -125,7 +145,7 @@ function bands_only(
     sim::Simulation,
     k_bloch::Tuple{AbstractArray{S,M},AbstractArray{T,M}},
     num_bands,
-    pg=[]) where S where T where M
+    pg=nothing) where S where T where M
 
     ka_bloch = k_bloch[1]
     kb_bloch = k_bloch[2]

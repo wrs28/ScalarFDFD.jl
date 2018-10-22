@@ -71,7 +71,8 @@ end
 function waveguide_dispersion(sim::Simulation, waveguide::Int;
     interpolation=:cubic, β_start=0, β_stop=20, nβ=31,
     num_wg_modes=maximum([sim.sct.channels[i].quantum_number for i ∈ eachindex(sim.sct.channels)])+1,
-    free_band_zone=:half, parallel=nprocs()>1, num_bloch=17, num_free_bands=2, num_wg_bands_multiplier=2)
+    free_band_zone=:half, parallel=nprocs()>1, num_bloch=17, num_free_bands=2,
+    num_wg_bands_multiplier=2, disp_opt=true)
 
     if isempty(sim.sys.waveguides)
         nothing
@@ -81,7 +82,7 @@ function waveguide_dispersion(sim::Simulation, waveguide::Int;
         wg_dispersion, ks, bands, gaps = ScalarFDFD.pc_waveguide_dispersion(sim, waveguide;
             num_wg_bands_multiplier=num_wg_bands_multiplier, num_bloch=num_bloch,
             num_free_bands=num_free_bands, parallel=parallel, free_band_zone=free_band_zone,
-            interpolation=interpolation)
+            interpolation=interpolation, disp_opt=disp_opt)
     elseif ScalarFDFD.isplanar(sim.sys.domains[ScalarFDFD.get_waveguide_domains(sim, waveguide)[1]])
         wg_sim = extract_waveguide_simulation(sim, waveguide)
         wg_dispersion, ks, bands, gaps = ScalarFDFD.planar_waveguide_dispersion(wg_sim;
@@ -121,7 +122,7 @@ end
     wg_bands = pc_waveguide_dispersion(sim::Simulation, waveguide, gaps; num_free_bands=2, num_wg_bands=15, num_bloch=17, interpolation=:cubic)
 """
 function pc_waveguide_dispersion(sim::Simulation, waveguide::Int; num_wg_bands_multiplier,
-    num_bloch, num_free_bands, interpolation, parallel, free_band_zone)
+    num_bloch, num_free_bands, interpolation, parallel, free_band_zone, disp_opt=true)
 
     wg_sim = extract_waveguide_simulation(sim, waveguide)
     num_wg_bands=round(Int,num_wg_bands_multiplier*max(wg_sim.lat.a/wg_sim.lat.b,wg_sim.lat.b/wg_sim.lat.a))
@@ -137,9 +138,9 @@ function pc_waveguide_dispersion(sim::Simulation, waveguide::Int; num_wg_bands_m
         k_bloch = kb_bloch
     end
 
-    _, gaps = band_structure(pc_sim, num_bloch; num_bands=num_free_bands, parallel=parallel, interpolation=interpolation, zone=free_band_zone, calc_type="waveguide band structure ")
-    free_bands, _, _ = band_structure(pc_sim, (ka_bloch, kb_bloch); num_bands=num_free_bands, parallel=parallel, interpolation=interpolation, pg=Progress(Int(1e5), 1e5))
-    _, _, bands = band_structure(wg_sim, (ka_bloch, kb_bloch); num_bands=num_wg_bands, parallel=parallel, calc_type="waveguide dispersion ")
+    _, gaps = band_structure(pc_sim, num_bloch; num_bands=num_free_bands, parallel=parallel, interpolation=interpolation, zone=free_band_zone, calc_type="waveguide band structure ", disp_opt=disp_opt)
+    free_bands, _, _ = band_structure(pc_sim, (ka_bloch, kb_bloch); num_bands=num_free_bands, parallel=parallel, interpolation=interpolation, pg=Progress(Int(1e5), 1e5), disp_opt=disp_opt)
+    _, _, bands = band_structure(wg_sim, (ka_bloch, kb_bloch); num_bands=num_wg_bands, parallel=parallel, calc_type="waveguide dispersion ", disp_opt=disp_opt)
 
     mode_bool = fill(false, num_wg_bands)
     for i ∈ eachindex(bands)
