@@ -52,12 +52,13 @@ Note: Set `D` or `F` to zero to get passive cavity.
 Linear methods don't account for line-pulling, and only account for open boundaries
 if either absorbing layers, PML's, or explicitly open boudnary conditions are used.
 """
-function eig_k(sim::Simulation, k::Number; ka=0, kb=0, F=[1], ψ_init=[], η_init=0, is_linear=true)
+function eig_k(sim::Simulation, k::Number; ka=0, kb=0, F=[1], ψ_init=[], η_init=0,
+            is_linear=true, k_avoid=[0], disp_opt=false, tol=.5, max_count=15, max_iter=50, args...)
     nk=1
     if is_linear
         k, ψ = eig_kl(sim, k, nk, ka, kb, F, ψ_init)
     else
-        k, ψ, _ = eig_knl(sim, k, η_init, ka, kb, F, ψ_init)
+        k, ψ, _ = eig_knl(sim, k, η_init, ka, kb, F, ψ_init, k_avoid, disp_opt, tol, max_count, max_iter)
     end
     return k::Array{ComplexF64,1}, ψ::Array{ComplexF64,2}
 end # straight wrapper linear/CF root-finding
@@ -65,14 +66,14 @@ end # straight wrapper linear/CF root-finding
 
 # straight wrapper linear/contour
 function eig_k(sim::Simulation, k::Number, nk::Int, radii=(.1,.1); ka=0, kb=0, F=[1], ψ_init=[], is_linear=true,
-    r_min=.01, Nq=100, rank_tol=1e-8, parallel=true)
+            r_min=.01, Nq=100, rank_tol=1e-8, parallel=nprocs()>1, args...)
     if is_linear
         k,ψ = eig_kl(sim, k, nk, ka, kb, F, ψ_init)
     else
         if parallel
-            k = eig_knl(sim, k, nk, radii, ka, kb, F, Nq)
+            k = eig_knl(sim, k, nk, radii, ka, kb, F, Nq, rank_tol, r_min)
         else
-            k = eig_knlp(sim, k, nk, radii, ka, kb, F, Nq)
+            k = eig_knlp(sim, k, nk, radii, ka, kb, F, Nq, rank_tol, r_min)
         end
         ψ=fill(complex(NaN,NaN), prod(sim.dis.N), length(k))
     end
@@ -81,11 +82,15 @@ end
 
 
 # k_type linear/CF root-finding
-function eig_k(sim::Simulation, k::Number, k_type::Symbol; F=[1], ψ_init=[], is_linear=true, direction::Array{Int,1}=[1,1], ka=0, kb=0)
+function eig_k(sim::Simulation, k::Number, k_type::Symbol; F=[1], ψ_init=[], is_linear=true,
+                direction::Array{Int,1}=[1,1], ka=0, kb=0, η_init=0, k_avoid=[0], disp_opt=false,
+                tol=.5, max_count=15, max_iter=50, args...)
 
     bl_original = set_bl!(sim, k_type, direction)
     try
-        k, ψ = eig_k(sim, k; F=F, ψ_init=ψ_init, is_linear=is_linear, ka=ka, kb=kb)
+        k, ψ = eig_k(sim, k; F=F, ψ_init=ψ_init, is_linear=is_linear, ka=ka, kb=kb,
+                        η_init=η_init, k_avoid=k_avoid, disp_opt=disp_opt, tol=tol,
+                        max_count=max_count, max_iter=max_iter)
         return k, ψ
     finally
         reset_bl!(sim, bl_original)
@@ -95,11 +100,13 @@ end
 
 # k_type linear/contour
 function eig_k(sim::Simulation, k::Number, k_type::Symbol, nk::Int, radii=(.1,.1);
-            F=[1], ψ_init=[], direction::Array{Int,1}=[1,1], is_linear=true, Nq=100, ka=0, kb=0, parallel=false)
+            F=[1], ψ_init=[], direction::Array{Int,1}=[1,1], is_linear=true, Nq=100,
+            ka=0, kb=0, r_min=.01, rank_tol=1e-8, parallel=nprocs()>1, args...)
 
     bl_original = set_bl!(sim, k_type, direction)
     try
-        k, ψ = eig_k(sim, k, nk, radii; F=F, ψ_init=ψ_init, is_linear=is_linear, Nq=Nq, ka=ka, kb=kb, parallel=parallel)
+        k, ψ = eig_k(sim, k, nk, radii; F=F, ψ_init=ψ_init, is_linear=is_linear,
+                        Nq=Nq, ka=ka, kb=kb, r_min=r_min, rank_tol=rank_tol, parallel=parallel)
         return k, ψ
     finally
         reset_bl!(sim, bl_original)
@@ -133,18 +140,19 @@ practice this has very little effect.
 
 - `η_init` is the anchor CF eigenvalue, solutions are found which are closest to it.
 """
-function eig_cf(sim::Simulation, k::Number, ncf; η_init=0, ka=0, kb=0, F=[1], u_init=[])
+function eig_cf(sim::Simulation, k::Number, ncf::Int; η_init=0, ka=0, kb=0, F=[1], u_init=[])
 
     η, u = eig_cf(sim, k, ncf, η_init, ka, kb, F, u_init)
     return η, u
 end
 
 
-function eig_cf(sim::Simulation, k, k_type::Symbol, ncf=1; direction::Array{Int,1}=[1,1], η_init=0, ka=0, kb=0, F=[1], u_init=[])
+function eig_cf(sim::Simulation, k, k_type::Symbol, ncf::Int=1; direction::Array{Int,1}=[1,1],
+                    η_init=0, ka=0, kb=0, F=[1], u_init=[])
 
     bl_original = set_bl!(sim, k_type, direction)
     try
-        η, u = eig_cf(sim, k, ncf, η_init, ka, kb, F, u_init=u_init)
+        η, u = eig_cf(sim, k, ncf, η_init, ka, kb, F, u_init)
         return η, u
     finally
         reset_bl!(sim, bl_original)
