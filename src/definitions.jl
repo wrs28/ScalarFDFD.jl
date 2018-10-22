@@ -97,7 +97,7 @@ struct Domain
     num_regions::Int
 
     function Domain(;is_in_domain=whole_domain, n₁=1, n₂=0, F=0, domain_params=[],
-        domain_type=:generic, lattice=Bravais(),
+        domain_type=:background, lattice=Bravais(),
         is_in_region::Array{Function,1}=Function[],
         region_params=fill(Float64[],length(is_in_region)),
         n₁_val=fill(1,length(is_in_region)), n₁_idx=Array(1:length(n₁_val)),
@@ -110,7 +110,7 @@ struct Domain
         length(F_idx) == length(n₁_idx) == length(n₂_idx) ==
         length(is_in_region) == length(region_params) ? nothing :
         throw(ArgumentError(
-        "Lengths of regions don't match.
+        "lengths of regions don't match.
         F_idx, n₁_idx, n₂_idx, is_in_region, region_params must share length."))
         )
 
@@ -118,24 +118,7 @@ struct Domain
 
         if which_asymptote ==:none && which_waveguide !== 0
             throw(ArgumentError(
-            "Assigned a waveguide identifier $(which_waveguide) to a non-asymptotic domain"))
-        end
-
-        if which_asymptote ∈ [:left, :right]        && !isinf(lattice.a)    && is_in_domain  == is_in_cell
-            domain_type = :pc_waveguide_defect
-        elseif which_asymptote ∈ [:left, :right]    && !isinf(lattice.a)    && is_in_domain !== is_in_cell
-            domain_type = :pc_waveguide
-        elseif which_asymptote ∈ [:left, :right]    &&  isinf(lattice.a)
-            domain_type = :planar_waveguide
-        elseif which_asymptote ∈ [:bottom, :top]    && !isinf(lattice.b)    && is_in_domain  == is_in_cell
-            domain_type = :pc_waveguide_defect
-        elseif which_asymptote ∈ [:bottom, :top]    && !isinf(lattice.b)    && is_in_domain !== is_in_cell
-            domain_type = :pc_waveguide
-        elseif which_asymptote ∈ [:bottom, :top]    &&  isinf(lattice.b)
-            domain_type = :planar_waveguide
-        elseif which_asymptote == :none
-        else
-            throw(ArgumentError("Invalid asymptotic region specification $(which_asymptote)."))
+            "assigned a waveguide identifier $(which_waveguide) to a non-asymptotic domain"))
         end
 
         return new(is_in_domain, float(n₁), float(n₂), float(F), float.(domain_params),
@@ -175,9 +158,9 @@ struct System
                     F=Array{Float64}(undef, 0, 0),
                     regions=Array{Int}(undef, 0, 0))
 
-
-        sort!(domains, by=isdefect, rev=true)
         sort!(domains, by=isbulkwaveguide, rev=false)
+        sort!(domains, by=isbackground, rev=false)
+        sort!(domains, by=isdefect, rev=true)
         sort!(domains, by=ispc, rev=false)
         sort!(domains, by=iswaveguide, rev=true)
 
@@ -247,9 +230,15 @@ struct Discretization
         x = [Array{Float64}(undef,N[1],1), Array{Float64}(undef,1,N[2])]
         x_idx = [Array{Int}(undef, N_tr[1]), Array{Int}(undef, N_tr[2])]
         for j ∈ eachindex(N)
-            x[j][:] = origin[j] .+ dx[j]*(1/2:N[j]-1/2)
-            x_tr[j][:] = x[j][1] .+ dN[1,j]*dx[j] .+ collect(0:N_tr[j]-1).*dx[j]
-            x_idx[j][:] = dN[1,j] .+ (1:N_tr[j])
+            if !isinf(dx[j])
+                x[j][:] .= origin[j] .+ dx[j]*(1/2:N[j]-1/2)
+                x_tr[j][:] .= x[j][1] .+ dN[1,j]*dx[j] .+ collect(0:N_tr[j]-1).*dx[j]
+                x_idx[j][:] .= dN[1,j] .+ (1:N_tr[j])
+            else
+                x[j][:] .= origin[j]
+                x_tr[j][:] .= x[j][1]
+                x_idx[j][:] .= dN[1,j] .+ (1:N_tr[j])
+            end
         end
 
         X_idx = LinearIndices(Array{Bool}(undef, N...))[x_idx...][:]
@@ -397,6 +386,13 @@ struct Simulation
         tls::TwoLevelSystem=TwoLevelSystem(),
         lat::Bravais=Bravais(bnd))
 
+        sys = deepcopy(sys)
+        bnd = deepcopy(bnd)
+        dis = deepcopy(dis)
+        sct = deepcopy(sct)
+        tls = deepcopy(tls)
+        lat = deepcopy(lat)
+
         ∂Ω = bnd.∂Ω
         L = Array{Float64}(undef,2)
         for i ∈ 1:2
@@ -404,7 +400,12 @@ struct Simulation
         end
 
         dx = dis.dx
-        N = round.(Int,L./dx)
+        try
+            N = round.(Int,L./dx)
+        catch
+            throw(ArgumentError("lattice spacings $dx inconsistent with size $L"))
+        end
+
         dN = Array{Int}(undef,2,2)
         index1 = findmin(N)[2]
         index2 = mod1(index1+1,2)
@@ -417,6 +418,7 @@ struct Simulation
             bnd.bl_depth[:,index1] .= 0
             bnd.bl_depth[:,index2] .= dN[:,index2]*dx[index2]
             bnd.bl[:,index1] .= :none
+            bnd.bc[:,index1] .= :d
         else
             dx[index1] = L[index1]/N[index1]
             dx[index2] = L[index2]/round(Int,L[index2]/dx[index1])
@@ -441,12 +443,9 @@ struct Simulation
             end
         end
 
-        ɛ, F, regions = sub_pixel_smoothing(bnd, dis, sys)
+        ɛ, F, regions = ScalarFDFD.sub_pixel_smoothing(bnd, dis, sys)
         sys = System(sys.domains, ε, F, regions)
 
-        if !(sct.waveguides_used ⊆ sys.waveguides)
-            throw(ArgumentError("A channel references undefined waveguides."))
-        end
         for i ∈ 1:length(sct.waveguides_used)
             sct.ɛ₀[i] = Array{ComplexF64}(undef,dis.N[1],dis.N[2])
             wg_inds = findall([sys.domains[j].which_waveguide for j ∈ eachindex(sys.domains)] .== sct.waveguides_used[i])
@@ -454,7 +453,11 @@ struct Simulation
             for j ∈ eachindex(wg_domains)
                 wg_domains[j] = Domain(sys.domains[wg_inds[j]]; :which_asymptote => :none, :which_waveguide => 0)
             end
-            sct.ɛ₀[i][:] = sub_pixel_smoothing(bnd, dis, System(wg_domains))[1][:]
+            if isempty(wg_domains)
+                @warn "channels references undefined waveguide $(sct.waveguides_used[i]), scattering calculations will fail"
+            else
+                sct.ɛ₀[i][:] = ScalarFDFD.sub_pixel_smoothing(bnd, dis, System(wg_domains))[1][:]
+            end
         end
 
         return new(sys, bnd, dis, sct, tls, lat)
