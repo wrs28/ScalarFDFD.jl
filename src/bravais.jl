@@ -81,6 +81,10 @@ lattice
 """
 function bravais_coordinates_unit_cell(x, y, lattice::Bravais)
 
+    if (isinf(lattice.a) && iszero(lattice.β-π/2)) || (isinf(lattice.b) && iszero(lattice.α)) || (isinf(lattice.a) && isinf(lattice.b))
+        return float(x), float(y)
+    end
+
     p1, p2 = bravais_coordinates(x, y, lattice)
     p1 = mod(p1, lattice.a)
     p2 = mod(p2, lattice.b)
@@ -125,9 +129,10 @@ end
 coordinates in bravais frame (i.e. (x,y) = p1*v1 + p2*v2)
 """
 function bravais_coordinates(x, y, lattice::Bravais)
-    if (isinf(lattice.a) && iszero(lattice.β-π/2)) || (isinf(lattice.b) && iszero(lattice.α))
+    if (isinf(lattice.a) && iszero(lattice.β-π/2)) || (isinf(lattice.b) && iszero(lattice.α)) || (isinf(lattice.a) && isinf(lattice.b))
         return float(x-lattice.x0), float(y-lattice.y0)
     end
+
     x += -lattice.x0
     y += -lattice.y0
 
