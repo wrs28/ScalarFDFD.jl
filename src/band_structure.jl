@@ -4,7 +4,7 @@
 ### WRAPPERS
 ################################################################################
 """
-    bands, gaps = band_structure(sim, num_bloch::Int; num_bands=5, zone=:reduced, interpolation=:cubic)
+    bands, gaps = band_structure(sim, num_bloch::Int; num_bands=5, zone=:half, interpolation=:cubic)
 
 band structure along path specified by `zone`, which must be one of :reduced, :half, :full,
 or an integer or array of integers.
@@ -18,7 +18,7 @@ Zone specification is
 
 Except for reduced, each zone is defined by (_ ↑ ←, ↗ ↓ ↖)
 """
-function band_structure(sim::Simulation, num_bloch::Int; num_bands=5, zone=:reduced, parallel=false, interpolation=:cubic, calc_type="band structure ")
+function band_structure(sim::Simulation, num_bloch::Int; num_bands=5, zone=:half, parallel=nprocs()>1, interpolation=:cubic, calc_type="band structure ")
 
     k_paths, zones, order = band_paths(sim, num_bloch, zone)
     bands = Array{Array{Array{Array{Float64,2},1},1},1}(undef, length(zones))
@@ -44,12 +44,12 @@ end
 
 
 """
-    bands, gaps, kxy = band_structure(sim, num_bloch::Array; num_bands=5, zone=:reduced)
+    bands, gaps, kxy = band_structure(sim, num_bloch::Array; num_bands=5, zone=:half)
 
 band structure as full surface over zone specified by `zone`, which must be one of
 :reduced, :half, :full.
 """
-function band_structure(sim::Simulation, num_bloch::Array{Int,1}; num_bands=5, zone=:reduced, parallel=false, interpolation=nothing, line=nothing)
+function band_structure(sim::Simulation, num_bloch::Array{Int,1}; num_bands=5, zone=:half, parallel=nprocs()>1, calc_type="band structure ", interpolation=nothing, line=nothing)
 
     if length(num_bloch)==1
         num_bloch = fill(num_bloch[1],2)
@@ -76,9 +76,9 @@ function band_structure(sim::Simulation, num_bloch::Array{Int,1}; num_bands=5, z
     end
 
     if parallel
-        bands = bands_only_p(sim, (ka, kb), num_bands, Progress(prod(size(ka)), PROGRESS_UPDATE_TIME::Float64, "band structure "))
+        bands = bands_only_p(sim, (ka, kb), num_bands, Progress(prod(size(ka)), PROGRESS_UPDATE_TIME::Float64, calc_type))
     else
-        bands = bands_only(sim, (ka, kb), num_bands, Progress(prod(size(ka)), PROGRESS_UPDATE_TIME::Float64, "band structure "))
+        bands = bands_only(sim, (ka, kb), num_bands, Progress(prod(size(ka)), PROGRESS_UPDATE_TIME::Float64, calc_type))
     end
     gaps, bands_itp = find_gaps([[[real(bands)]]], interpolation)
 
@@ -87,7 +87,7 @@ end
 
 
 function band_structure(sim::Simulation, k_bloch::Tuple{AbstractArray{S,M},AbstractArray{T,M}};
-    num_bands=5, parallel=false, interpolation=:cubic,
+    num_bands=5, parallel=nprocs()>1, interpolation=:cubic,
     calc_type = "band structure ",
     pg::Progress=Progress(prod(size(k_bloch[1])), PROGRESS_UPDATE_TIME::Float64, calc_type)
     ) where S where T where M
@@ -108,7 +108,7 @@ end
 
 bands and gaps of photonic crystal that defines background of `waveguide`
 """
-function band_structure(sim::Simulation; waveguide, num_bloch=17, num_bands=5, parallel=false, interpolation=:cubic, zone=:half)
+function band_structure(sim::Simulation; waveguide, num_bloch=17, num_bands=5, parallel=nprocs()>1, interpolation=:cubic, zone=:half)
     wg_sim = extract_waveguide_simulation(sim, waveguide)
     pc_sim = Simulation(2, wg_sim)
     bands, gaps = band_structure(pc_sim, num_bloch; num_bands=num_bands, parallel=parallel, interpolation=interpolation, zone=zone, calc_type="waveguide band structure ")
@@ -132,7 +132,8 @@ function bands_only(
 
     bands = Array{ComplexF64, M+1}(undef, num_bands, size(ka_bloch)...)
     for i ∈ CartesianIndices(ka_bloch)
-        bands[:,i] = eig_k(sim, 0.01, num_bands; ka=ka_bloch[i], kb=kb_bloch[i])[1]
+        bands[:,i] = eig_k(sim, 0.001, num_bands; ka=ka_bloch[i], kb=kb_bloch[i])[1]
+
         if typeof(pg)==Progress
             next!(pg)
         end
@@ -200,7 +201,7 @@ end
 
 `zone` can be an integer, array, or one of `:reduced`, `:half`, `:full`
 """
-function band_paths(sim::Simulation, num_bloch, zone=:reduced)
+function band_paths(sim::Simulation, num_bloch, zone=:half)
 
     k1 = [0,0]
     k2 = 2π*(sim.lat.v1/2sim.lat.a)
