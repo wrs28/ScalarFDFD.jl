@@ -158,6 +158,8 @@ struct System
                     F=Array{Float64}(undef, 0, 0),
                     regions=Array{Int}(undef, 0, 0))
 
+        domains = deepcopy(domains)
+
         sort!(domains, by=isbulkwaveguide, rev=false)
         sort!(domains, by=isbackground, rev=false)
         sort!(domains, by=isdefect, rev=true)
@@ -221,6 +223,12 @@ struct Discretization
 
     function Discretization(dx, sub_pixel_num, origin, N, dN)
 
+        dx = deepcopy(dx)
+        sub_pixel_num=deepcopy(sub_pixel_num)
+        origin = deepcopy(origin)
+        N = deepcopy(N)
+        dN = deepcopy(dN)
+
         N_tr = Array{Int}(undef,2)
         for j ∈ eachindex(N)
             N_tr[j] = N[j] - dN[1,j] - dN[2,j]
@@ -262,6 +270,11 @@ struct Boundary
 
     function Boundary(∂Ω::Array{S,2}, bc::Array{Symbol,2}, bl::Array{Symbol,2},
         bl_depth::Array{T,2}) where S where T
+
+        ∂Ω = deepcopy(∂Ω)
+        bc = deepcopy(bc)
+        bl = deepcopy(bl)
+        bl_depth = deepcopy(bl_depth)
 
         ∂Ω_tr = Array{Float64}(undef, 2, 2)
 
@@ -331,6 +344,10 @@ struct Scattering
     ε₀::Array{Array{ComplexF64,2},1}
 
     function Scattering(channels::Array{Channels,1}=Channels[], ε₀=[])
+
+        channels = deepcopy(channels)
+        ε₀ = deepcopy(ε₀)
+
         num_channels = length(channels)
         waveguides = Array{Int}(undef,num_channels)
         for i ∈ eachindex(waveguides)
