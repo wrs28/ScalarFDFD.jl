@@ -44,6 +44,13 @@ function System(sys::System)
 end
 
 
+"""
+    sys = System(domain1, domain2, ...)
+"""
+function System(args::Vararg{Domain})
+    return System(vcat(args...))
+end
+
 
 ################################################################################
 ### DISCRETIZATION
@@ -157,7 +164,12 @@ function Scattering(sct::Scattering; channels=sct.channels)
     return Scattering(channels)
 end
 
-
+"""
+    sct = Scattering(channel1, channel2, ...)
+"""
+function Scattering(args::Vararg{Channels})
+    return Scattering(vcat(args...))
+end
 
 ################################################################################
 ### TWOLEVELSYSTEM
