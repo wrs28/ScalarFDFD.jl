@@ -56,7 +56,7 @@ end
 Builds a domain out of `regions` (::Regions), with background parameters
 `is_in_domain`, `domain_params`, etc.
 """
-function build_domain(regions::Regions; is_in_domain=whole_domain, domain_params=[],
+function build_domain(regions::Regions=Regions(); is_in_domain=whole_domain, domain_params=[],
                         n₁=1, n₂=0, F=0, domain_type=:generic, lattice=Bravais(),
                         which_asymptote=:none, which_waveguide=0)
     return Domain(; is_in_domain=is_in_domain, n₁=n₁, n₂=n₂, F=F,
