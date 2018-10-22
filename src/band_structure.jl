@@ -102,7 +102,7 @@ end
 function band_structure(sim::Simulation, k_bloch::Tuple{AbstractArray{S,M},AbstractArray{T,M}};
     num_bands=5, parallel=nprocs()>1, interpolation=:cubic,
     calc_type = "band structure ",
-    pg::Progress=Progress(prod(size(k_bloch[1])), PROGRESS_UPDATE_TIME::Float64, calc_type)
+    pg::Progress=Progress(prod(size(k_bloch[1])), PROGRESS_UPDATE_TIME::Float64, calc_type),
     disp_opt=true) where S where T where M
 
     if !disp_opt

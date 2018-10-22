@@ -363,7 +363,7 @@ function bands_only_p(
     sim::Simulation,
     k_bloch::Tuple{AbstractArray{S,M},AbstractArray{T,M}},
     num_bands,
-    pg = 0) where S where T where M
+    pg = nothing) where S where T where M
 
     periodic_boundary_weights!(sim)
 
