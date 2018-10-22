@@ -12,15 +12,15 @@ function sub_pixel_smoothing(bnd::Boundary, dis::Discretization, sys::System)
     x = dis.x[1]
     y = dis.x[2]
 
-    domains = which_domain.(x, y, Ref(bnd), Ref(sys))
-    xy = bravais_coordinates_unit_cell.(x, y, domains, Ref(sys))
+    domains = ScalarFDFD.which_domain.(x, y, Ref(bnd), Ref(sys))
+    xy = ScalarFDFD.bravais_coordinates_unit_cell.(x, y, domains, Ref(sys))
     xb = Array{Float64}(undef,size(xy))
     yb = Array{Float64}(undef,size(xy))
     for i ∈ eachindex(xb)
         xb[i] = xy[i][1]
         yb[i] = xy[i][2]
     end
-    regions = which_region.(xb, yb, domains, Ref(sys))
+    regions = ScalarFDFD.which_region.(xb, yb, domains, Ref(sys))
     r = regions
 
     ε_by_region = sys.ε_by_region
@@ -108,13 +108,13 @@ function sub_pixel_smoothing(bnd::Boundary, dis::Discretization, sys::System)
                 Ry = rand(rng,sub_pixel_num)
                 sub_x[:] = x_min .+ (x_max-x_min)*Rx
                 sub_y[:] = y_min .+ (y_max-y_min)*Ry
-                sub_domains[:] = which_domain.(sub_x,sub_y, Ref(bnd), Ref(sys))
-                xy[:] = bravais_coordinates_unit_cell.(sub_x, sub_y, sub_domains, Ref(sys))
+                sub_domains[:] = ScalarFDFD.which_domain.(sub_x,sub_y, Ref(bnd), Ref(sys))
+                xy[:] = ScalarFDFD.bravais_coordinates_unit_cell.(sub_x, sub_y, sub_domains, Ref(sys))
                 for k ∈ eachindex(xb)
                     xb[k] = xy[k][1]
                     yb[k] = xy[k][2]
                 end
-                sub_regions[:] = which_region.(xb, yb, sub_domains, Ref(sys))
+                sub_regions[:] = ScalarFDFD.which_region.(xb, yb, sub_domains, Ref(sys))
                 ɛ[i,j] = mean(ɛ_by_region[sub_regions])
                 F[i,j] = mean(F_by_region[sub_regions])
             end
@@ -140,6 +140,9 @@ function which_domain(x, y, bnd::Boundary, sys::System)
         (sys.domains[domain].which_asymptote==:none && sys.domains[domain].is_in_domain(x, y, domain, bnd, sys)::Bool)
         ))
         domain += 1
+    end
+    if domain == length(sys.domains)+1
+        throw(ErrorException("no domain found for ($x,$y). has a background domain been defined?"))
     end
     return domain
 end
@@ -246,31 +249,4 @@ end
 """
 function whole_domain(x,y,idx,bnd::Boundary,sys::System)
     return true
-end
-
-
-################################################################################
-###############  ISA's  #######################################
-################################################################################
-"""
-    iswaveguide(domain::Domain)
-"""
-function iswaveguide(domain::Domain)
-    return domain.domain_type ∈ [:pc_waveguide, :pc_waveguide_defect, :planar_waveguide]
-end
-
-
-"""
-    isbulkwaveguide(domain::Domain))
-"""
-function isbulkwaveguide(domain::Domain)
-    return domain.domain_type ∈ [:bulk_waveguide_x, :bulk_waveguide_y, :bulk_pc_defect_waveguide_x, :bulk_pc_defect_waveguide_y]
-end
-
-
-"""
-    isdefect(domain::Domain))
-"""
-function isdefect(domain::Domain)
-    return domain.domain_type ∈ [:defect, :point_defect, :simple_line_defect, :periodic_line_defect, :line_defect, :pc_waveguide_defect]
 end
