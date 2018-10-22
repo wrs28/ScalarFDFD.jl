@@ -390,6 +390,36 @@ end
 
     (Iapetos(), sim, wg_dispersion, outargs..., band_color, band_width, band_style, gap_color, gap_width, gap_style, dispersion_width, dispersion_style)
 end
+@recipe function f(simd::Simulation, sim::Simulation;
+    band_color = BAND_COLOR,
+    band_width = BAND_WIDTH,
+    band_style = BAND_STYLE,
+    gap_color = GAP_COLOR,
+    gap_width = GAP_WIDTH,
+    gap_style = GAP_STYLE,
+    dispersion_width = DISPERSION_WIDTH,
+    dispersion_style = DISPERSION_STYLE)
+
+    wg_dispersion = AbstractInterpolation[sim.sct.channels[i].dispersion[1] for i ∈ eachindex(sim.sct.channels)]
+    gaps = ([sim.sct.channels[i].gaps[j][1] for i ∈ eachindex(sim.sct.channels) for j ∈ eachindex(sim.sct.channels[i].gaps)],[sim.sct.channels[i].gaps[j][2] for i ∈ eachindex(sim.sct.channels) for j ∈ eachindex(sim.sct.channels[i].gaps)])
+
+    (Iapetos(), sim, wg_dispersion, Array{Float64}(undef,0,0), gaps, Float64[], band_color, band_width, band_style, gap_color, gap_width, gap_style, dispersion_width, dispersion_style)
+end
+@recipe function f(sim::Simulation, sct::Scattering;
+    band_color = BAND_COLOR,
+    band_width = BAND_WIDTH,
+    band_style = BAND_STYLE,
+    gap_color = GAP_COLOR,
+    gap_width = GAP_WIDTH,
+    gap_style = GAP_STYLE,
+    dispersion_width = DISPERSION_WIDTH,
+    dispersion_style = DISPERSION_STYLE)
+
+    wg_dispersion = AbstractInterpolation[sct.channels[i].dispersion[1] for i ∈ eachindex(sct.channels)]
+    gaps = ([sct.channels[i].gaps[j][1] for i ∈ eachindex(sim.sct.channels) for j ∈ eachindex(sct.channels[i].gaps)],[sct.channels[i].gaps[j][2] for i ∈ eachindex(sct.channels) for j ∈ eachindex(sct.channels[i].gaps)])
+
+    (Iapetos(), sim, wg_dispersion, Array{Float64}(undef,0,0), gaps, Float64[], band_color, band_width, band_style, gap_color, gap_width, gap_style, dispersion_width, dispersion_style)
+end
 
 """
     outargs = outargs_for_wg_plotting(args)
@@ -426,13 +456,13 @@ end
 ########## SOLUTIONS
 ################################################################################
 """
-    p = plot(sim, ψ, theme=:DEFAULT_COLOR_SCHEME; by=nothing, truncate=true, plot_type=:heatmap)
+    p = plot(sim, ψ, theme=:DEFAULT_COLOR_SCHEME; by=nothing, truncate=true, seriestype=:heatmap)
 
 plots
 to turn off translucent effect, add optional argument `seriesalpha=0`
 vary type of plot with `seriestype`, e.g. `seriestype=:contour`
 """
-@recipe function f(sim::Simulation, ψ::Array{ComplexF64}, theme::Symbol=DEFAULT_COLOR_SCHEME::Symbol; by=nothing, truncate=true)
+@recipe function f(sim::Simulation, ψ::Array{ComplexF64}, theme::Symbol=DEFAULT_COLOR_SCHEME::Symbol; by=nothing, truncate=true, seriestype=:heatmap)
 
     # check whether ψ was originally provided or if just plotting sim
     if length(ψ) > 0
@@ -448,15 +478,15 @@ vary type of plot with `seriestype`, e.g. `seriestype=:contour`
 
     # 1d plot or 2d plot
     if 1 ∈ sim.dis.N
-        (sim, ψ[idx,:], theme, by, 1)
+        (sim, ψ[idx,:], theme, by, seriestype, 1)
     else
-        (sim, ψ[idx,:], theme, by, 2, 2)
+        (sim, ψ[idx,:], theme, by, seriestype, 2, 2)
     end
 end
 
 
 # 2d plot
-@recipe function f(sim::Simulation, ψ::Array{ComplexF64}, theme::Symbol, by::Union{Function,Nothing}, dim1::Int, dim2::Int)
+@recipe function f(sim::Simulation, ψ::Array{ComplexF64}, theme::Symbol, by::Union{Function,Nothing}, seriestype::Symbol, dim1::Int, dim2::Int)
 
     # check whether ψ was originally provided or if just plotting sim
     if isempty(ψ)
@@ -492,7 +522,7 @@ end
     aspect_ratio :=1
     xlim := [∂Ω[1],∂Ω[2]]
     ylim := [∂Ω[3],∂Ω[4]]
-    seriestype --> :heatmap
+    seriestype --> seriestype
     colorbar --> false
     overwrite_figure --> false
     levels --> 15
@@ -542,26 +572,24 @@ end
         end
 
         for i ∈ 1:N
+            ψ = ψ_plot[:,:,i]
             @series begin
                 subplot := 3i+1
-                ψ = real(ψ_plot[:,:,i])
                 clims --> (-maximum(abs.(ψ)), maximum(abs.(ψ)))
                 color := cmapc
-                x, y, permutedims(ψ)
+                x, y, permutedims(real(ψ))
             end
             @series begin
                 subplot := 3i+2
-                ψ = imag(ψ_plot[:,:,i])
                 clims --> (-maximum(abs.(ψ)), maximum(abs.(ψ)))
                 color := cmapc
-                x, y, permutedims(ψ)
+                x, y, permutedims(imag(ψ))
             end
             @series begin
                 subplot := 3i+3
-                ψ = abs2.(ψ_plot[:,:,i])
-                clims --> (0,maximum(ψ))
+                clims --> (0,maximum(abs2.(ψ)))
                 color := cmapk
-                x, y, permutedims(ψ)
+                x, y, permutedims(abs2.(ψ))
             end
         end
     else
@@ -597,9 +625,10 @@ end
         end
         size --> (a,b)
         for i ∈ 1:N
-            ψ = by.(ψ_plot[:,:,i])
+            ψ = ψ_plot[:,:,i]
             n₁ = real(sqrt.(ɛ-1im*sim.tls.D₀*F))
-            renorm = (maximum(ψ) - minimum(ψ))/(maximum(n₁)-minimum(n₁))
+            renorm = (maximum(abs.(ψ)) - minimum(abs.(ψ)))/(maximum(n₁)-minimum(n₁))
+
             n₁ = n₁ .- minimum(n₁)
             n₁ = renorm*n₁
             @series begin
@@ -617,13 +646,13 @@ end
             @series begin
                 subplot := i
                 color := cmap
-                seriesalpha --> .8
+                seriesalpha --> .85
                 if by ∈ [abs, abs2]
-                    clims := (0, maximum(ψ))
+                    clims --> (0, maximum(by.(ψ)))
                 else
-                    clims := (-maximum(abs.(ψ)),+maximum(abs.(ψ)))
+                    clims --> (-maximum(abs.(ψ)),+maximum(abs.(ψ)))
                 end
-                x, y, permutedims(ψ)
+                x, y, permutedims(by.(ψ))
             end
         end
     end
@@ -632,6 +661,7 @@ end
 
 # 1d plot
 @recipe function f(sim::Simulation, ψ::Array{ComplexF64}, theme::Symbol, by::Union{Function,Nothing}, seriestype::Symbol, dim1::Int)
+
     if isempty(ψ)
         N=0
     else
@@ -645,12 +675,14 @@ end
             ∂Ω = sim.bnd.∂Ω[:,2]
             ε = sim.sys.ε[1,:]
             F = sim.sys.F[1,:]
+            bottom_label = "y"
         else
             x = sim.dis.x[1][:]
             M = sim.dis.N[1]
             ∂Ω = sim.bnd.∂Ω[:,1]
             ε = sim.sys.ε[:,1]
             F = sim.sys.F[:,1]
+            bottom_label = "x"
         end
     else
         if sim.dis.N[1]==1
@@ -659,21 +691,23 @@ end
             ∂Ω = sim.bnd.∂Ω_tr[:,2]
             ε = sim.sys.ε[1,sim.dis.X_idx]
             F = sim.sys.F[1,sim.dis.X_idx]
+            bottom_label = "y"
         else
             x = sim.dis.x_tr[1][:]
             M = sim.dis.N_tr[1]
             ∂Ω = sim.bnd.∂Ω_tr[:,1]
             ε = sim.sys.ε[sim.dis.X_idx,1]
             F = sim.sys.F[sim.dis.X_idx,1]
+            bottom_label = "x"
         end
     end
 
     ψ_plot = ψ
-
-    aspect_ratio :=1
+    n_mult = 1.1
     seriestype := :line
     overwrite_figure := false
-    xlim := [∂Ω[1],∂Ω[2]]
+    legend --> false
+    lw --> 2
 
     if by==nothing
 
@@ -681,40 +715,64 @@ end
         layout := (1+N,3)
 
         @series begin
-            title := "real"
+            ylabel := string("Re{n(", bottom_label, ")}")
+            xlabel --> bottom_label
             subplot := 1
-            x, real(sqrt.(ɛ-1im*sim.tls.D₀*F))
+            n = real(sqrt.(ɛ-1im*sim.tls.D₀*F))
+            ylims := (minimum(n), n_mult*maximum(n))
+            x, n
         end
         @series begin
-            title := "imag"
+            ylabel := string("Im{n(", bottom_label, ")}")
+            xlabel --> bottom_label
             subplot := 2
-            x, imag(sqrt.(ɛ-1im*sim.tls.D₀*F))
+            n = imag(sqrt.(ɛ-1im*sim.tls.D₀*F))
+            ylims := (-maximum(abs.(n)), maximum(abs.(n)))
+            x, n
         end
         @series begin
-            title := "F/abs²"
+            ylabel := string("F(", bottom_label, ")")
+            xlabel --> bottom_label
             subplot := 3
+            ylims := (-maximum(abs.(F)), maximum(abs.(F)))
             x, F
         end
 
         for i ∈ 1:N
+            ψ = ψ_plot[:,i]
             @series begin
+                ylabel := LaTeXString("Re\\{\\psi\\}")
+                xlabel --> bottom_label
                 subplot := 3i+1
-                x, real(ψ_plot[:,i])
+                ylims = (-maximum(abs.(ψ)), maximum(abs.(ψ)))
+                x, real(ψ)
             end
             @series begin
+                ylabel := LaTeXString("Im\\{\\psi\\}")
+                xlabel --> bottom_label
                 subplot := 3i+2
-                x, imag(ψ_plot[:,i])
+                ylims = (-maximum(abs.(ψ)), maximum(abs.(ψ)))
+                x, imag(ψ)
             end
             @series begin
+                ylabel := LaTeXString("|\\psi|^2")
+                xlabel --> bottom_label
                 subplot := 3i+3
-                x, abs2.(ψ_plot[:,i])
+                ylims := (0, maximum(abs2.(ψ)))
+                x, abs2.(ψ)
             end
         end
     else
         layout := N
         for i ∈ 1:N
+            ψ = ψ_plot[:,i]
             @series begin
-                x, by.(ψ_plot[:,i])
+                if by ∈ [abs, abs2]
+                    ylims := (0, by.(ψ))
+                else
+                    ylims := (-maximum(abs.(ψ)), maximum(abs.(ψ)))
+                end
+                x, by.(ψ)
             end
         end
     end
@@ -725,7 +783,7 @@ end
 ########## ANIMATION
 ################################################################################
 """
-    iterator = wave(sim, ψ, theme=:default; by=real, n=60, plot_type=:heatmap)
+    iterator = wave(sim, ψ, theme=:default; by=real, n=60, seriestype=:heatmap)
 
 input for Plots.animate
 
@@ -737,16 +795,16 @@ Use cases:
 
 Note: default `fps`=20, and `n`=60, so default movie is 3 seconds long
 """
-function wave(sim::Simulation, ψ, theme::Symbol=DEFAULT_COLOR_SCHEME::Symbol; truncate=true, by=real, n=60)
+function wave(sim::Simulation, ψ, theme::Symbol=DEFAULT_COLOR_SCHEME::Symbol; truncate=true, by=real, n=60, seriestype=:heatmap)
     if truncate
         idx = sim.dis.X_idx
     else
         idx = 1:prod(sim.dis.N)
     end
     if 1 ∈ sim.dis.N
-        return imap( ϕ->(sim, exp(-1im*ϕ)*ψ[idx,:], theme, by, 1), 0:2π/n:2π*(1-1/n))
+        return imap( ϕ->(sim, exp(-1im*ϕ)*ψ[idx,:], theme, by, seriestype, 1), 0:2π/n:2π*(1-1/n))
     else
-        return imap( ϕ->(sim, exp(-1im*ϕ)*ψ[idx,:], theme, by, 1, 1), 0:2π/n:2π*(1-1/n))
+        return imap( ϕ->(sim, exp(-1im*ϕ)*ψ[idx,:], theme, by, seriestype, 1, 1), 0:2π/n:2π*(1-1/n))
     end
 end
 
