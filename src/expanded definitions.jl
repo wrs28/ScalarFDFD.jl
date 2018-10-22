@@ -60,6 +60,10 @@ discretization object for Simulation
 function Discretization(dx::Real, sub_pixel_num::Int=DEFAULT_SUBSAMPLE_NUMBER::Int, origin=[0.,0.], N=[1,1], dN=[0 0;0 0])
     return Discretization([dx,dx], sub_pixel_num, origin, N, dN)
 end
+function Discretization(dx::Array, sub_pixel_num::Int=DEFAULT_SUBSAMPLE_NUMBER::Int)
+    origin=[0.,0.]; N=[1,1]; dN=[0 0;0 0]
+    return Discretization(dx, sub_pixel_num, origin, N, dN)
+end
 
 
 """
@@ -195,7 +199,7 @@ function Simulation(dom::Domain; bnd::Boundary=Boundary(bc=:p), dis::Discretizat
         bnd.∂Ω[1,2] = lattice.y0
         bnd.∂Ω[2,2] = lattice.y0+Nb*lattice.b*sin(lattice.β)
     end
-    return Simulation(sys=System(dom); bnd=Boundary(bnd), dis=dis, tls=tls, lat=Bravais(lattice; :a=>Na*lattice.a, :b=>Nb*lattice.b))
+    return deepcopy(Simulation(sys=System(dom); bnd=Boundary(bnd), dis=dis, tls=tls, lat=Bravais(lattice; :a=>Na*lattice.a, :b=>Nb*lattice.b)))
 end
 
 
@@ -208,7 +212,7 @@ as in `sim`, except it is `Na`×`Nb` unit cells.
 Intended for case where `domain` has a finite lattice structure.
 """
 function Simulation(dom::Domain, sim::Simulation; Na=1, Nb=1)
-    return Simulation(dom; dis=sim.dis, tls=sim.tls, Na=Na, Nb=Nb)
+    return deepcopy(Simulation(dom; dis=sim.dis, tls=sim.tls, Na=Na, Nb=Nb))
 end
 
 
@@ -221,7 +225,7 @@ the same as in `sim`, except it is `Na`×`Nb` unit cells.
 Intended for case where specified domain has a finite lattice structure.
 """
 function Simulation(domain_num::Int, sim::Simulation; Na=1, Nb=1)
-    return Simulation(sim.sys.domains[domain_num]; dis=sim.dis, tls=sim.tls, Na=Na, Nb=Nb)
+    return deepcopy(Simulation(sim.sys.domains[domain_num]; dis=sim.dis, tls=sim.tls, Na=Na, Nb=Nb))
 end
 
 
@@ -231,6 +235,6 @@ end
 new simulation object from old, with modified fields.
 """
 function Simulation(sim::Simulation; sys=sim.sys, bnd=sim.bnd, dis=sim.dis, sct=sim.sct, tls=sim.tls, lat=sim.lat)
-    return Simulation(sys=System(sys), bnd=Boundary(bnd), dis=Discretization(dis),
-            sct=Scattering(sct), tls=TwoLevelSystem(tls), lat=Bravais(lat))
+    return deepcopy(Simulation(sys=System(sys), bnd=Boundary(bnd), dis=Discretization(dis),
+            sct=Scattering(sct), tls=TwoLevelSystem(tls), lat=Bravais(lat)))
 end
