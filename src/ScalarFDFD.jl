@@ -9,7 +9,6 @@ LinearAlgebra,
 LaTeXStrings,
 NLsolve,
 ProgressMeter,
-Optim,
 Random,
 RecipesBase,
 Serialization,
@@ -17,6 +16,7 @@ SparseArrays,
 SpecialFunctions,
 Statistics
 
+import Optim: optimize, BFGS
 import UnicodePlots: lineplot, lineplot!, BlockCanvas
 
 # Simulation Definitions
