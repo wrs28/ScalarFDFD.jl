@@ -363,7 +363,7 @@ function bands_only_p(
     sim::Simulation,
     k_bloch::Tuple{AbstractArray{S,M},AbstractArray{T,M}},
     num_bands,
-    pg = []) where S where T where M
+    pg = 0) where S where T where M
 
     periodic_boundary_weights!(sim)
 
@@ -378,7 +378,7 @@ function bands_only_p(
     kas = [ka_bloch[i] for i ∈ CartesianIndices(ka_bloch)]
     kbs = [kb_bloch[i] for i ∈ CartesianIndices(ka_bloch)]
 
-    if !isempty(pg)
+    if typeof(pg) <: Progress
         B = progress_pmap(eig_kl, sims, ks, num_bandss, kas, kbs, Fs, ψ_inits; progress=pg)
     else
         B = pmap(eig_kl, sims, ks, num_bandss, kas, kbs, Fs, ψ_inits)
@@ -416,11 +416,11 @@ end
 ################################################################################
 ### WAVEGUIDE DISPERSION
 ################################################################################
-function build_dispersion_p!(sim::Simulation;
+function build_dispersions_p!(sim::Simulation;
     num_wg_bands=round(Int,1.5*max(sim.lat.a/sim.lat.b,sim.lat.b/sim.lat.a)),
     num_bloch=17, num_free_bands=2)
 
-    build_dispersion!(sim; num_wg_bands=num_wg_bands, num_bloch=num_bloch, num_free_bands=num_free_bands, parallel=true)
+    build_dispersions!(sim; num_wg_bands=num_wg_bands, num_bloch=num_bloch, num_free_bands=num_free_bands, parallel=true)
     return nothing
 end
 
@@ -428,8 +428,8 @@ function waveguide_dispersion_p(sim::Simulation, waveguide::Int;
     num_wg_bands=round(Int,1.5*max(sim.lat.a/sim.lat.b,sim.lat.b/sim.lat.a)),
     num_free_bands=2, num_bloch=17, interpolation=:cubic)
 
-    wg_dispersion, bands, gaps, ks = waveguide_dispersion_p(sim, waveguide; num_wg_bands=num_wg_bands, num_free_bands=num_free_bands, num_bloch=num_bloch, parallel=true, interpolation=interpolation)
-    return wg_dispersion, bands, gaps, ks
+    wg_dispersion, ks, bands, gaps = waveguide_dispersion_p(sim, waveguide; num_wg_bands=num_wg_bands, num_free_bands=num_free_bands, num_bloch=num_bloch, parallel=true, interpolation=interpolation)
+    return wg_dispersion, ks, bands, gaps
 end
 
 ################################################################################
