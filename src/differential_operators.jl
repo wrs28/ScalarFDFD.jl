@@ -99,12 +99,17 @@ function laplacian(sim::Simulation, k; ka=0, kb=0)
     𝕀1 = sparse(complex(1.,0)I, sim.dis.N[1], sim.dis.N[1])
     𝕀2 = sparse(complex(1.,0)I, sim.dis.N[2], sim.dis.N[2])
 
+    v1 = ka*sim.lat.v1*sim.lat.a
+    v2 = kb*sim.lat.v2*sim.lat.b
+    ϕx = (v1+v2)[1]
+    ϕy = (v1+v2)[2]
+
     return (
     (𝕀2 ⊗ ∇₁²) + (∇₂² ⊗ 𝕀1) +
-    sparse(exp(+1im*ka*sim.lat.a)*I,size(C₁))*C₁ +
-    sparse(exp(-1im*ka*sim.lat.a)*I,size(C₁ᵀ))*C₁ᵀ +
-    sparse(exp(+1im*kb*sim.lat.b)*I,size(C₂))*C₂ +
-    sparse(exp(-1im*kb*sim.lat.b)*I,size(C₂ᵀ))*C₂ᵀ
+    sparse(exp(+1im*ϕx)*I,size(C₁))*C₁ +
+    sparse(exp(-1im*ϕx)*I,size(C₁ᵀ))*C₁ᵀ +
+    sparse(exp(+1im*ϕy)*I,size(C₂))*C₂ +
+    sparse(exp(-1im*ϕy)*I,size(C₂ᵀ))*C₂ᵀ
     )
 end
 
@@ -365,7 +370,13 @@ function periodic_boundary_weights(sim::Simulation, dim)
         v[1] = cy1[i]
         v[2] = cy2[i]
 
-        j[:], k[:], l[:] = findnz( sparse(t, u, v, N[2], N[2]) ⊗ sparse(q, r, s, N[1], N[1]) )
+        if 1 ∈ N
+            j[1:2], k[1:2], l[1:2] = findnz( sparse(t, u, v, N[2], N[2]) ⊗ sparse(q, r, s, N[1], N[1]) )
+            j[3:4] .= k[3:4] .= 1
+            l[3:4] .= 0
+        else
+            j[:], k[:], l[:] = findnz( sparse(t, u, v, N[2], N[2]) ⊗ sparse(q, r, s, N[1], N[1]) )
+        end
 
         I[(4(i-1)+1):(4(i-1)+4)] = j
         J[(4(i-1)+1):(4(i-1)+4)] = k
