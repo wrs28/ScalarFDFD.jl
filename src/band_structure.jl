@@ -119,6 +119,44 @@ function band_structure(sim::Simulation, k_bloch::Tuple{AbstractArray{S,M},Abstr
 end
 
 
+function band_structure(sim::Simulation, k_bloch::Tuple{AbstractArray{S,M},AbstractArray{T,M}},
+    num_bloch_interpolations::Int, reciprocal_basis=true;
+    num_bands=5, parallel=nprocs()>1, interpolation=:cubic,
+    calc_type = "band structure ",
+    pg::Progress=Progress(num_bloch_interpolations*(length(k_bloch[1])-1), PROGRESS_UPDATE_TIME, calc_type),
+    disp_opt=true) where S where T where M
+
+    kas = Array{Float64}(undef, num_bloch_interpolations*(length(k_bloch[1])-1))
+    kbs = deepcopy(kas)
+    for i ∈ 1:length(k_bloch[1])-1
+        if reciprocal_basis
+            ka_start = k_bloch[1][i]*2π/sim.lat.a
+            kb_start = k_bloch[2][i]*2π/sim.lat.b
+
+            ka_stop = k_bloch[1][i+1]*2π/sim.lat.a
+            kb_stop = k_bloch[2][i+1]*2π/sim.lat.b
+        else
+            ka_start = k_bloch[1][i]
+            kb_start = k_bloch[2][i]
+
+            ka_stop = k_bloch[1][i+1]
+            kb_stop = k_bloch[2][i+1]
+        end
+        ka_temp = LinRange(ka_start, ka_stop, num_bloch_interpolations)
+        kb_temp = LinRange(kb_start, kb_stop, num_bloch_interpolations)
+        for j ∈ 1:num_bloch_interpolations
+            kas[(i-1)*num_bloch_interpolations + j] = ka_temp[j]
+            kbs[(i-1)*num_bloch_interpolations + j] = kb_temp[j]
+        end
+    end
+
+    bands, gaps, bands_itp = band_structure(sim, (kas, kbs); num_bands=num_bands, parallel=parallel,
+        interpolation=interpolation, calc_type=calc_type, pg=pg, disp_opt=disp_opt)
+
+    return bands, gaps, bands_itp, (kas, kbs)
+end
+
+
 """
     bands, gaps, ks = band_structure(sim; waveguide, num_bloch=17, num_bands=5, interpolation=:cubic)
 
