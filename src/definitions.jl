@@ -1,4 +1,5 @@
 #TODO: Domain: complete documentation for Domain struct
+#TODO: Add argument warnings or errors or correcition for some range of alphas and betas so that band scheme can work
 """
     lattice = Bravais(;a=Inf, α=0, b=Inf, β=π/2, x0=0, y0=0)
 
@@ -303,7 +304,7 @@ struct Boundary
             ∂Ω_tr[2,j] = ∂Ω[2,j] - bl_depth[2,j]
         end
 
-        weights = Array{SparseMatrixCSC{Float64,Int}}(undef,4)
+        weights = Array{SparseMatrixCSC{Float64,Int}}(undef,12)
         return new(float.(∂Ω), float.(∂Ω_tr), bc, bl, float.(bl_depth), weights)
     end
 end
