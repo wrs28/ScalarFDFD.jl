@@ -310,8 +310,8 @@ function add_pc_waveguide(sim::Simulation; x0=0, y0=0, direction, width)
 end
 function add_pc_waveguide(sys::System; x0=0, y0=0, direction, width)
     waveguide_number = length(sys.waveguides)+1
-    temp_sys = System(sys.domains[.!iswaveguide.([sys.domains[i] for i ∈ eachindex(sys.domains)])])
+    temp_sys = System(sys.domains[.!ScalarFDFD.iswaveguide.([sys.domains[i] for i ∈ eachindex(sys.domains)]) .& .!ScalarFDFD.isbulkwaveguide.([sys.domains[i] for i ∈ eachindex(sys.domains)])])
     domain = ScalarFDFD.which_domain(x0,y0, Boundary([-Inf Inf;-Inf Inf],:d,:none,0), temp_sys)
-    waveguide_domains = ScalarFDFD.pc_waveguide_domains(sys.domains[domain]; x0=x0, y0=y0, direction=direction, width=width, waveguide_number=waveguide_number)
+    waveguide_domains = ScalarFDFD.pc_waveguide_domains(temp_sys.domains[domain]; x0=x0, y0=y0, direction=direction, width=width, waveguide_number=waveguide_number)
     return System(vcat(waveguide_domains,sys.domains))
 end

@@ -397,11 +397,12 @@ struct Simulation
     tls::TwoLevelSystem
     lat::Bravais
 
-    function Simulation(; sys::System=System(Domain()), bnd::Boundary,
+    function Simulation(;sys::System=System(Domain()), bnd::Boundary,
         dis::Discretization,
         sct::Scattering=Scattering(),
         tls::TwoLevelSystem=TwoLevelSystem(),
-        lat::Bravais=Bravais(bnd))
+        lat::Bravais=Bravais(bnd),
+        disp_opt=false)
 
         sys = deepcopy(sys)
         bnd = deepcopy(bnd)
@@ -460,7 +461,7 @@ struct Simulation
             end
         end
 
-        ɛ, F, regions = ScalarFDFD.sub_pixel_smoothing(bnd, dis, sys)
+        ɛ, F, regions = ScalarFDFD.sub_pixel_smoothing(bnd, dis, sys; disp_opt=disp_opt)
         sys = System(sys.domains, ε, F, regions)
 
         for i ∈ 1:length(sct.waveguides_used)
@@ -473,7 +474,7 @@ struct Simulation
             if isempty(wg_domains)
                 @warn "channels references undefined waveguide $(sct.waveguides_used[i]), scattering calculations will fail"
             else
-                sct.ɛ₀[i][:] = ScalarFDFD.sub_pixel_smoothing(bnd, dis, System(wg_domains))[1][:]
+                sct.ɛ₀[i][:] = ScalarFDFD.sub_pixel_smoothing(bnd, dis, System(wg_domains), disp_opt=disp_opt)[1][:]
             end
         end
 

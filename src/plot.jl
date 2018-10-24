@@ -1,13 +1,14 @@
 #TODO: check 1d plots, to waveguixe_dispersion
+#TODO: make things depend on environmental variable DEFAULT_COLOR_SCHEME
 
-BAND_COLOR = :lightgrey
-BAND_WIDTH = 1.2
-BAND_STYLE = :solid
-GAP_COLOR = :lightgrey
-GAP_WIDTH = 1
-GAP_STYLE = :dash
-DISPERSION_WIDTH = 3
-DISPERSION_STYLE = :solid
+const BAND_COLOR = :lightgrey
+const BAND_WIDTH = 1.2
+const BAND_STYLE = :solid
+const GAP_COLOR = :lightgrey
+const GAP_WIDTH = 1
+const GAP_STYLE = :dash
+const DISPERSION_WIDTH = 3
+const DISPERSION_STYLE = :solid
 
 ################################################################################
 ########## BAND STRUCTURE
@@ -447,7 +448,7 @@ end
 """
     p = plot(sim, theme=:DEFAULT_COLOR_SCHEME)
 """
-@recipe function f(sim::Simulation, theme::Symbol=DEFAULT_COLOR_SCHEME::Symbol)
+@recipe function f(sim::Simulation, theme::Symbol=DEFAULT_COLOR_SCHEME)
     (sim, ComplexF64[], theme)
 end
 
@@ -456,13 +457,13 @@ end
 ########## SOLUTIONS
 ################################################################################
 """
-    p = plot(sim, ψ, theme=:DEFAULT_COLOR_SCHEME; by=nothing, truncate=true, seriestype=:heatmap)
+    p = plot(sim, ψ, theme=:DEFAULT_COLOR_SCHEME; by=nothing, truncate=true)
 
 plots
 to turn off translucent effect, add optional argument `seriesalpha=0`
 vary type of plot with `seriestype`, e.g. `seriestype=:contour`
 """
-@recipe function f(sim::Simulation, ψ::Array{ComplexF64}, theme::Symbol=DEFAULT_COLOR_SCHEME::Symbol; by=nothing, truncate=true, seriestype=:heatmap)
+@recipe function f(sim::Simulation, ψ::Array{ComplexF64}, theme::Symbol=DEFAULT_COLOR_SCHEME::Symbol; by=nothing, truncate=true)
 
     # check whether ψ was originally provided or if just plotting sim
     if length(ψ) > 0
@@ -478,15 +479,15 @@ vary type of plot with `seriestype`, e.g. `seriestype=:contour`
 
     # 1d plot or 2d plot
     if 1 ∈ sim.dis.N
-        (sim, ψ[idx,:], theme, by, seriestype, 1)
+        (sim, ψ[idx,:], theme, by, 1)
     else
-        (sim, ψ[idx,:], theme, by, seriestype, 2, 2)
+        (sim, ψ[idx,:], theme, by, 2, 2)
     end
 end
 
 
 # 2d plot
-@recipe function f(sim::Simulation, ψ::Array{ComplexF64}, theme::Symbol, by::Union{Function,Nothing}, seriestype::Symbol, dim1::Int, dim2::Int)
+@recipe function f(sim::Simulation, ψ::Array{ComplexF64}, theme::Symbol, by::Union{Function,Nothing}, dim1::Int, dim2::Int)
 
     # check whether ψ was originally provided or if just plotting sim
     if isempty(ψ)
@@ -522,11 +523,11 @@ end
     aspect_ratio :=1
     xlim := [∂Ω[1],∂Ω[2]]
     ylim := [∂Ω[3],∂Ω[4]]
-    seriestype --> seriestype
     colorbar --> false
     overwrite_figure --> false
     levels --> 15
     lw --> 6
+    seriestype --> :heatmap
 
     if by==nothing || iszero(N)
 
@@ -660,7 +661,7 @@ end
 
 
 # 1d plot
-@recipe function f(sim::Simulation, ψ::Array{ComplexF64}, theme::Symbol, by::Union{Function,Nothing}, seriestype::Symbol, dim1::Int)
+@recipe function f(sim::Simulation, ψ::Array{ComplexF64}, theme::Symbol, by::Union{Function,Nothing}, dim1::Int)
 
     if isempty(ψ)
         N=0
@@ -795,16 +796,16 @@ Use cases:
 
 Note: default `fps`=20, and `n`=60, so default movie is 3 seconds long
 """
-function wave(sim::Simulation, ψ, theme::Symbol=DEFAULT_COLOR_SCHEME::Symbol; truncate=true, by=real, n=60, seriestype=:heatmap)
+function wave(sim::Simulation, ψ, theme::Symbol=DEFAULT_COLOR_SCHEME::Symbol; truncate=true, by=real, n=60)
     if truncate
         idx = sim.dis.X_idx
     else
         idx = 1:prod(sim.dis.N)
     end
     if 1 ∈ sim.dis.N
-        return imap( ϕ->(sim, exp(-1im*ϕ)*ψ[idx,:], theme, by, seriestype, 1), 0:2π/n:2π*(1-1/n))
+        return imap( ϕ->(sim, exp(-1im*ϕ)*ψ[idx,:], theme, by, 1), 0:2π/n:2π*(1-1/n))
     else
-        return imap( ϕ->(sim, exp(-1im*ϕ)*ψ[idx,:], theme, by, seriestype, 1, 1), 0:2π/n:2π*(1-1/n))
+        return imap( ϕ->(sim, exp(-1im*ϕ)*ψ[idx,:], theme, by, 1, 1), 0:2π/n:2π*(1-1/n))
     end
 end
 
@@ -845,10 +846,10 @@ function fix_colormap(theme)
         cmapsim2=:bky
         n_mult=1.0
     elseif theme ∈ [:solarized_light]
-        cmapc=:Spectral
+        cmapc=:YlOrBr
         cmapk=:Greys
-        cmapsim1=:Greys
-        cmapsim2=:RdGy
+        cmapsim1=:YlOrBr
+        cmapsim2=:RdYlBu
         F_sign = -1
     else
         cmapc=:RdBu

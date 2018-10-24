@@ -246,7 +246,7 @@ end
 
 new simulation object from old, with modified fields.
 """
-function Simulation(sim::Simulation; sys=sim.sys, bnd=sim.bnd, dis=sim.dis, sct=sim.sct, tls=sim.tls, lat=sim.lat)
+function Simulation(sim::Simulation; sys=sim.sys, bnd=sim.bnd, dis=sim.dis, sct=sim.sct, tls=sim.tls, lat=sim.lat, disp_opt=false)
     return deepcopy(Simulation(sys=System(sys), bnd=Boundary(bnd), dis=Discretization(dis),
-            sct=Scattering(sct), tls=TwoLevelSystem(tls), lat=Bravais(lat)))
+            sct=Scattering(sct), tls=TwoLevelSystem(tls), lat=Bravais(lat), disp_opt=disp_opt))
 end

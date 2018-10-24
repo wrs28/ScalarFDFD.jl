@@ -186,7 +186,7 @@ Base.show(io::IO, sim::Simulation) = begin
     "sct: ", sim.sct, "\n\n",
     "tls: ", sim.tls)
     if [sim.lat.a, sim.lat.b] !== [Inf,Inf]
-        print(io, "\n\nlattice: ", sim.lat)
+        print(io, "\n\nlat: ", sim.lat)
     end
 end
 

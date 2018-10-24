@@ -87,6 +87,7 @@ function eig_k(sim::Simulation, k::Number, k_type::Symbol; F=[1], ψ_init=[], is
                 tol=.5, max_count=15, max_iter=50, args...)
 
     bl_original = set_bl!(sim, k_type, direction)
+    println(sim.bnd)
     try
         k, ψ = eig_k(sim, k; F=F, ψ_init=ψ_init, is_linear=is_linear, ka=ka, kb=kb,
                         η_init=η_init, k_avoid=k_avoid, disp_opt=disp_opt, tol=tol,
@@ -104,6 +105,7 @@ function eig_k(sim::Simulation, k::Number, k_type::Symbol, nk::Int, radii=(.1,.1
             ka=0, kb=0, r_min=.01, rank_tol=1e-8, parallel=nprocs()>1, args...)
 
     bl_original = set_bl!(sim, k_type, direction)
+    println(sim.bnd)
     try
         k, ψ = eig_k(sim, k, nk, radii; F=F, ψ_init=ψ_init, is_linear=is_linear,
                         Nq=Nq, ka=ka, kb=kb, r_min=r_min, rank_tol=rank_tol, parallel=parallel)

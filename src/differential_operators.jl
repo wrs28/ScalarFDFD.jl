@@ -106,10 +106,10 @@ function laplacian(sim::Simulation, k; ka=0, kb=0)
 
     return (
     (𝕀2 ⊗ ∇₁²) + (∇₂² ⊗ 𝕀1) +
-    sparse(exp(+1im*ϕx)*I,size(C₁))*C₁ +
-    sparse(exp(-1im*ϕx)*I,size(C₁ᵀ))*C₁ᵀ +
-    sparse(exp(+1im*ϕy)*I,size(C₂))*C₂ +
-    sparse(exp(-1im*ϕy)*I,size(C₂ᵀ))*C₂ᵀ
+    sparse(exp(-1im*ϕx)*I,size(C₁))*C₁ +
+    sparse(exp(+1im*ϕx)*I,size(C₁ᵀ))*C₁ᵀ +
+    sparse(exp(-1im*ϕy)*I,size(C₂))*C₂ +
+    sparse(exp(+1im*ϕy)*I,size(C₂ᵀ))*C₂ᵀ
     )
 end
 
@@ -398,7 +398,7 @@ function σ(sim::Simulation)
     α = Array{ComplexF64}(undef,2,2)
     for i ∈ CartesianIndices(α)
         if sim.bnd.bl[i] !== :none
-            α[i] = -(1/4)*(float(POWER_LAW)+1)*exp(complex(0,SCALING_ANGLE::Float64))*log(EXTINCTION::Float64)/(sim.bnd.bl_depth[i]^(float(POWER_LAW)+1))
+            α[i] = -(1/4)*(POWER_LAW+1)*exp(complex(0,SCALING_ANGLE))*log(EXTINCTION::Float64)/(sim.bnd.bl_depth[i]^(float(POWER_LAW)+1))
         else
             α[i] = 0
         end

@@ -1,4 +1,4 @@
-using ScalarFDFD
+@everywhere using ScalarFDFD
 
 ∂Ω = [-4  -4
        4   4]

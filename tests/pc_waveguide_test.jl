@@ -1,6 +1,6 @@
 # load ScalarFDFD on all process (@everywhere necessary b/c we will use parallel features)
+@startup
 @everywhere using ScalarFDFD
-
 # define boundary of computation domain Ω:
 ∂Ω = [-8  -8
        9  9]
@@ -119,7 +119,7 @@ savefig("test2/pc_sim2.pdf")
 # this time let's map out the whole surface, but over the reduced zone
 # (by making num_bloch an array instead of a number)
 bands, gaps = band_structure(sim; waveguide=1, num_bloch=[21], zone=:reduced)
-plot(sim, bands, gaps)
+plot(sim, bands, gaps; camera=(15,20))
 savefig("test2/pc_band_structure2.pdf")
 
 bands, gaps = band_structure(sim; waveguide=1, num_bloch=51, zone=:reduced)
@@ -186,10 +186,9 @@ k, ψ = eig_k(sim, 2.5, :u, 1; direction=[1,-1])
 println(k)
 plot(sim,ψ,by=real)
 savefig("test3/pc_uni_eig3.pdf")
+animate(wave(sim, ψ, :default; by=real), "test3/pc_scattering3.gif")
+
 
 ψ_sct, ψ_tot = scattering(sim, 2.5, [1])
 plot(sim, ψ_tot, :default; by=real, seriestype=:contour)
 savefig("test3/pc_scattering3.pdf")
-
-# and let's make a movie, but with contours this time
-animate(wave(sim, ψ_tot, :default; by=real), "test3/pc_scattering3.gif")

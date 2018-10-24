@@ -7,7 +7,7 @@
 """
     ε, F, regions = sub_pixel_smoothing(bnd, dis, sys)
 """
-function sub_pixel_smoothing(bnd::Boundary, dis::Discretization, sys::System)
+function sub_pixel_smoothing(bnd::Boundary, dis::Discretization, sys::System; disp_opt=false)
 
     x = dis.x[1]
     y = dis.x[2]
@@ -85,17 +85,19 @@ function sub_pixel_smoothing(bnd::Boundary, dis::Discretization, sys::System)
             # next!(pg)
         end
     else
-        rng = MersenneTwister(0)
-        Rx = rand(rng,sub_pixel_num)
-        Ry = rand(rng,sub_pixel_num)
-        sub_x = Array{Float64}(undef, sub_pixel_num)
-        sub_y = Array{Float64}(undef, sub_pixel_num)
-        xy = Array{Tuple{Float64,Float64}}(undef, sub_pixel_num)
-        xb = Array{Float64}(undef, sub_pixel_num)
-        yb = Array{Float64}(undef, sub_pixel_num)
-        sub_regions = Array{Int}(undef, sub_pixel_num)
-        sub_domains = Array{Int}(undef, sub_pixel_num)
-        # pg = Progress((length(x)-2)*(length(y)-2), PROGRESS_UPDATE_TIME::Float64, "sub-pixel smoothing ")
+        # rng = MersenneTwister(0)
+        # Rx = rand(rng,sub_pixel_num)
+        # Ry = rand(rng,sub_pixel_num)
+        sub_x = Array{Float64}(undef, sub_pixel_num, 1)
+        sub_y = Array{Float64}(undef, 1, sub_pixel_num)
+        xy = Array{Tuple{Float64,Float64}}(undef, sub_pixel_num, sub_pixel_num)
+        xb = Array{Float64}(undef, sub_pixel_num, sub_pixel_num)
+        yb = Array{Float64}(undef, sub_pixel_num, sub_pixel_num)
+        sub_regions = Array{Int}(undef, sub_pixel_num, sub_pixel_num)
+        sub_domains = Array{Int}(undef, sub_pixel_num, sub_pixel_num)
+        if disp_opt
+            pg = Progress((length(x)-2)*(length(y)-2), PROGRESS_UPDATE_TIME::Float64, "sub-pixel smoothing ")
+        end
         for i in 2:(length(x)-1), j in 2:(length(y)-1)
             nearestNeighborFlag = r[i,j]!==r[i,j+1] || r[i,j]!==r[i,j-1] || r[i,j]!==r[i+1,j] || r[i,j]!==r[i-1,j]
             nextNearestNeighborFlag = r[i,j]!==r[i+1,j+1] || r[i,j]!==r[i-1,j-1] || r[i,j]!==r[i+1,j-1] || r[i,j]!==r[i-1,j+1]
@@ -104,11 +106,11 @@ function sub_pixel_smoothing(bnd::Boundary, dis::Discretization, sys::System)
                 y_min = (y[j]+y[j-1])/2
                 x_max = (x[i]+x[i+1])/2
                 y_max = (y[j]+y[j+1])/2
-                Rx = rand(rng,sub_pixel_num)
-                Ry = rand(rng,sub_pixel_num)
-                sub_x[:] = x_min .+ (x_max-x_min)*Rx
-                sub_y[:] = y_min .+ (y_max-y_min)*Ry
-                sub_domains[:] = ScalarFDFD.which_domain.(sub_x,sub_y, Ref(bnd), Ref(sys))
+                # Rx = rand(rng,sub_pixel_num)
+                # Ry = rand(rng,sub_pixel_num)
+                sub_x[:] = LinRange(x_min, x_max, sub_pixel_num) #x_min .+ (x_max-x_min)*Rx
+                sub_y[:] = LinRange(y_min, y_max, sub_pixel_num) #y_min .+ (y_max-y_min)*Ry
+                sub_domains[:] = ScalarFDFD.which_domain.(sub_x, sub_y, Ref(bnd), Ref(sys))
                 xy[:] = ScalarFDFD.bravais_coordinates_unit_cell.(sub_x, sub_y, sub_domains, Ref(sys))
                 for k ∈ eachindex(xb)
                     xb[k] = xy[k][1]
@@ -118,7 +120,9 @@ function sub_pixel_smoothing(bnd::Boundary, dis::Discretization, sys::System)
                 ɛ[i,j] = mean(ɛ_by_region[sub_regions])
                 F[i,j] = mean(F_by_region[sub_regions])
             end
-            # next!(pg)
+            if disp_opt
+                next!(pg)
+            end
         end
     end
 
