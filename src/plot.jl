@@ -1,14 +1,5 @@
 #TODO: check 1d plots, to waveguixe_dispersion
-#TODO: make things depend on environmental variable DEFAULT_COLOR_SCHEME
-
-const BAND_COLOR = :lightgrey
-const BAND_WIDTH = 1.2
-const BAND_STYLE = :solid
-const GAP_COLOR = :lightgrey
-const GAP_WIDTH = 1
-const GAP_STYLE = :dash
-const DISPERSION_WIDTH = 3
-const DISPERSION_STYLE = :solid
+#TODO: make things depend on environmental variable COLOR_SCHEME
 
 ################################################################################
 ########## BAND STRUCTURE
@@ -446,10 +437,10 @@ end
 ########## SIMULATION
 ################################################################################
 """
-    p = plot(sim, theme=:DEFAULT_COLOR_SCHEME)
+    p = plot(sim)
 """
-@recipe function f(sim::Simulation, theme::Symbol=DEFAULT_COLOR_SCHEME)
-    (sim, ComplexF64[], theme)
+@recipe function f(sim::Simulation)
+    (sim, ComplexF64[])
 end
 
 
@@ -457,13 +448,13 @@ end
 ########## SOLUTIONS
 ################################################################################
 """
-    p = plot(sim, ψ, theme=:DEFAULT_COLOR_SCHEME; by=nothing, truncate=true)
+    p = plot(sim, ψ; by=nothing, truncate=true)
 
 plots
 to turn off translucent effect, add optional argument `seriesalpha=0`
 vary type of plot with `seriestype`, e.g. `seriestype=:contour`
 """
-@recipe function f(sim::Simulation, ψ::Array{ComplexF64}, theme::Symbol=DEFAULT_COLOR_SCHEME::Symbol; by=nothing, truncate=true)
+@recipe function f(sim::Simulation, ψ::Array{ComplexF64}; by=nothing, truncate=true)
 
     # check whether ψ was originally provided or if just plotting sim
     if length(ψ) > 0
@@ -479,15 +470,15 @@ vary type of plot with `seriestype`, e.g. `seriestype=:contour`
 
     # 1d plot or 2d plot
     if 1 ∈ sim.dis.N
-        (sim, ψ[idx,:], theme, by, 1)
+        (sim, ψ[idx,:], by, 1)
     else
-        (sim, ψ[idx,:], theme, by, 2, 2)
+        (sim, ψ[idx,:], by, 2, 2)
     end
 end
 
 
 # 2d plot
-@recipe function f(sim::Simulation, ψ::Array{ComplexF64}, theme::Symbol, by::Union{Function,Nothing}, dim1::Int, dim2::Int)
+@recipe function f(sim::Simulation, ψ::Array{ComplexF64}, by::Union{Function,Nothing}, dim1::Int, dim2::Int)
 
     # check whether ψ was originally provided or if just plotting sim
     if isempty(ψ)
@@ -518,7 +509,7 @@ end
         ψ_plot[:,:,i] = reshape(ψ[:,i], M[1], M[2])
     end
 
-    cmapc, cmapk, cmapsim1, cmapsim2, n_mult, F_sign = fix_colormap(theme)
+    cmapc, cmapk, cmapsim1, cmapsim2, n_mult, F_sign = fix_colormap(:default)
 
     aspect_ratio :=1
     xlim := [∂Ω[1],∂Ω[2]]
@@ -661,7 +652,7 @@ end
 
 
 # 1d plot
-@recipe function f(sim::Simulation, ψ::Array{ComplexF64}, theme::Symbol, by::Union{Function,Nothing}, dim1::Int)
+@recipe function f(sim::Simulation, ψ::Array{ComplexF64}, by::Union{Function,Nothing}, dim1::Int)
 
     if isempty(ψ)
         N=0
@@ -784,7 +775,7 @@ end
 ########## ANIMATION
 ################################################################################
 """
-    iterator = wave(sim, ψ, theme=:default; by=real, n=60, seriestype=:heatmap)
+    iterator = wave(sim, ψ; by=real, n=60, seriestype=:heatmap)
 
 input for Plots.animate
 
@@ -796,68 +787,15 @@ Use cases:
 
 Note: default `fps`=20, and `n`=60, so default movie is 3 seconds long
 """
-function wave(sim::Simulation, ψ, theme::Symbol=DEFAULT_COLOR_SCHEME::Symbol; truncate=true, by=real, n=60)
+function wave(sim::Simulation, ψ; truncate=true, by=real, n=60)
     if truncate
         idx = sim.dis.X_idx
     else
         idx = 1:prod(sim.dis.N)
     end
     if 1 ∈ sim.dis.N
-        return imap( ϕ->(sim, exp(-1im*ϕ)*ψ[idx,:], theme, by, 1), 0:2π/n:2π*(1-1/n))
+        return imap( ϕ->(sim, exp(-1im*ϕ)*ψ[idx,:], by, 1), 0:2π/n:2π*(1-1/n))
     else
-        return imap( ϕ->(sim, exp(-1im*ϕ)*ψ[idx,:], theme, by, 1, 1), 0:2π/n:2π*(1-1/n))
+        return imap( ϕ->(sim, exp(-1im*ϕ)*ψ[idx,:], by, 1, 1), 0:2π/n:2π*(1-1/n))
     end
-end
-
-
-################################################################################
-########## AUXILLIARIES
-################################################################################
-"""
-    cmapc, cmapk, cmapsim1, cmapsim2, n_mult, F_sign = fix_colormap(theme)
-"""
-function fix_colormap(theme)
-
-    F_sign = +1
-    n_mult=1
-
-    if theme ∈ [:dark, :juno]
-        cmapc=:bkr
-        cmapk=:ice
-        cmapsim1=:dimgray
-        cmapsim2=:bky
-        n_mult=1.3
-    elseif theme ∈ [:solarized]
-        cmapc=:bky
-        cmapk=:solar
-        cmapsim1=:viridis
-        cmapsim2=:bky
-        n_mult=1.3
-    elseif theme ∈ [:orange]
-        cmapc=:bky
-        cmapk=:haline
-        cmapsim1=:inferno
-        cmapsim2=:bky
-        n_mult=1.1
-    elseif theme ∈ [:lime]
-        cmapc=:bky
-        cmapk=:haline
-        cmapsim1=:inferno
-        cmapsim2=:bky
-        n_mult=1.0
-    elseif theme ∈ [:solarized_light]
-        cmapc=:YlOrBr
-        cmapk=:Greys
-        cmapsim1=:YlOrBr
-        cmapsim2=:RdYlBu
-        F_sign = -1
-    else
-        cmapc=:RdBu
-        cmapk=:Greys
-        cmapsim1=:Greys
-        cmapsim2=:RdGy
-        F_sign = -1
-    end
-
-    return cmapc, cmapk, cmapsim1, cmapsim2, n_mult, F_sign
 end
