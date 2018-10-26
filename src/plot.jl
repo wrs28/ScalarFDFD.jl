@@ -38,6 +38,7 @@ note everything between `sim` and `ks` can appear in any order.
 
     title --> "Band Structure"
     legend --> false
+    grid --> false
 
     ks = ks*universal_scale
     bands = bands*universal_scale
@@ -149,6 +150,7 @@ end
 
     num_bands = size(bands[1][1][1],1)
     layout := length(bands)
+    grid --> false
     for i ∈ 1:length(bands)
         for j ∈ 1:length(bands[i])
             B = bands[i][j][1]
@@ -281,6 +283,7 @@ note everything after `sim` can appear in any order
     title --> "Band Structure and Waveguide Dispersion"
     xlabel --> LaTeXString("propagation constant  \\beta")
     ylabel --> LaTeXString("frequency  \\omega")
+    grid --> false
 
     if isempty(ks)
         ks = wg_dispersion[1].ranges[1]
