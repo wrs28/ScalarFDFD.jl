@@ -17,7 +17,7 @@ SpecialFunctions,
 Statistics
 
 import Optim: optimize, BFGS
-import UnicodePlots: lineplot, lineplot!, BlockCanvas
+# import UnicodePlots: lineplot, lineplot!, BlockCanvas
 
 # Simulation Definitions
 export Bravais,
