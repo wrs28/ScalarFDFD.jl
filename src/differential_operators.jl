@@ -93,48 +93,29 @@ function laplacian(sim::Simulation, k; ka=0, kb=0)
     ∇₁², ∇₂² = ScalarFDFD.laplacians_sans_bc(sim, k)
     ScalarFDFD.laplacians_with_bc!(∇₁², ∇₂², sim)
 
-    C1 = sim.bnd.weights[1]
-    C1ᵀ = sim.bnd.weights[2]
-    N1a = sim.bnd.weights[3]
-    N1b = sim.bnd.weights[4]
-    N1aᵀ = sim.bnd.weights[5]
-    N1bᵀ = sim.bnd.weights[6]
-    C2 = sim.bnd.weights[7]
-    C2ᵀ = sim.bnd.weights[8]
-    N2a = sim.bnd.weights[9]
-    N2b = sim.bnd.weights[10]
-    N2aᵀ = sim.bnd.weights[11]
-    N2bᵀ = sim.bnd.weights[12]
+    I1 = sim.bnd.indices[1]
+    J1 = sim.bnd.indices[2]
+    I2 = sim.bnd.indices[3]
+    J2 = sim.bnd.indices[4]
+
+    V1 = sim.bnd.weights[1]
+    V2 = sim.bnd.weights[2]
+
+    N1a = sim.bnd.shifts[1]
+    N1b = sim.bnd.shifts[2]
+    N2a = sim.bnd.shifts[3]
+    N2b = sim.bnd.shifts[4]
 
     𝕀1 = sparse(complex(1.,0)I, sim.dis.N[1], sim.dis.N[1])
     𝕀2 = sparse(complex(1.,0)I, sim.dis.N[2], sim.dis.N[2])
 
-    ϕ1 = ka*sim.lat.a*N1a + kb*sim.lat.b*N1b
-    ϕ1ᵀ = ka*sim.lat.a*N1aᵀ + kb*sim.lat.b*N1bᵀ
-    ϕ2 = ka*sim.lat.a*N2a + kb*sim.lat.b*N2b
-    ϕ2ᵀ = ka*sim.lat.a*N2aᵀ + kb*sim.lat.b*N2bᵀ
+    ϕ1 = -N1a*ka*sim.lat.a - N1b*kb*sim.lat.b
+    ϕ2 = -N2a*ka*sim.lat.a - N2b*kb*sim.lat.b
 
-    C1 = C1.*exp.(+1im*ϕ1) + C1ᵀ.*exp.(-1im*ϕ1ᵀ)
-    C2 = C2.*exp.(+1im*ϕ2) + C2ᵀ.*exp.(-1im*ϕ2ᵀ)
+    C1 = sparse(I1, J1, V1.*exp.(1im*ϕ1), prod(sim.dis.N), prod(sim.dis.N)) + sparse(J1, I1, V1.*exp.(-1im*ϕ1), prod(sim.dis.N), prod(sim.dis.N))
+    C2 = sparse(I2, J2, V2.*exp.(1im*ϕ2), prod(sim.dis.N), prod(sim.dis.N)) + sparse(J2, I2, V2.*exp.(-1im*ϕ2), prod(sim.dis.N), prod(sim.dis.N))
 
-    # ϕ1 = ka*sim.lat.a*N1a.nzval + kb*sim.lat.b*N1b.nzval
-    # ϕ1ᵀ = ka*sim.lat.a*N1aᵀ.nzval + kb*sim.lat.b*N1bᵀ.nzval
-    # ϕ2 = ka*sim.lat.a*N2a.nzval + kb*sim.lat.b*N2b.nzval
-    # ϕ2ᵀ = ka*sim.lat.a*N2aᵀ.nzval + kb*sim.lat.b*N2bᵀ.nzval
-
-    # i1, j1, k1 = findnz(Cₐ)
-    # i2, j2, k2 = findnz(Cₐᵀ)
-    # C1 = sparse(i1,j1, k1.*exp.(+1im*ϕ1), prod(sim.dis.N), prod(sim.dis.N)) +
-         # sparse(i2,j2, k2.*exp.(-1im*ϕ1ᵀ), prod(sim.dis.N), prod(sim.dis.N))
-
-    # i1, j1, k1 = findnz(Cᵦ)
-    # i2, j2, k2 = findnz(Cᵦᵀ)
-    # C2 = sparse(i1,j1, k1.*exp.(+1im*ϕ2), prod(sim.dis.N), prod(sim.dis.N)) +
-         # sparse(i2,j2, k2.*exp.(-1im*ϕ2ᵀ), prod(sim.dis.N), prod(sim.dis.N))
-
-    return (
-    (𝕀2 ⊗ ∇₁²) + (∇₂² ⊗ 𝕀1) + C1 + C2
-    )
+    return (𝕀2 ⊗ ∇₁²) + (∇₂² ⊗ 𝕀1) + C1 + C2
 end
 
 
@@ -230,53 +211,45 @@ function periodic_boundary_weights!(sim::Simulation)
         dx = sim.dis.dx[1]; dx² = dx^2
         dy = sim.dis.dx[2]; dy² = dy^2
 
-        Cₐ = spzeros(Float64,prod(sim.dis.N),prod(sim.dis.N))
-        Cₐᵀ = spzeros(Float64,prod(sim.dis.N),prod(sim.dis.N))
-        Cᵦ = spzeros(Float64,prod(sim.dis.N),prod(sim.dis.N))
-        Cᵦᵀ = spzeros(Float64,prod(sim.dis.N),prod(sim.dis.N))
-        N1a = spzeros(Float64,prod(sim.dis.N),prod(sim.dis.N))
-        N1b = spzeros(Float64,prod(sim.dis.N),prod(sim.dis.N))
-        N2a = spzeros(Float64,prod(sim.dis.N),prod(sim.dis.N))
-        N2b = spzeros(Float64,prod(sim.dis.N),prod(sim.dis.N))
+        I1  = Int[]
+        J1  = Int[]
+        V1  = Float64[]
+        N1a = Int[]
+        N1b = Int[]
+        I2  = Int[]
+        J2  = Int[]
+        V2  = Float64[]
+        N2a = Int[]
+        N2b = Int[]
 
         if :p ∈ bc[:,1] && bc[1,1] == bc[2,1]
-            I, J, V, Na, Nb =  periodic_boundary_weights(sim, 1)
-            Cₐ   = sparse(I, J, V/dx², prod(sim.dis.N), prod(sim.dis.N))
-            Cₐᵀ  = sparse(J, I, V/dx², prod(sim.dis.N), prod(sim.dis.N))
-            N1a  = sparse(I, J, Na, prod(sim.dis.N), prod(sim.dis.N), mean)
-            N1aᵀ = sparse(J, I, Na, prod(sim.dis.N), prod(sim.dis.N), mean)
-            N1b  = sparse(I, J, Nb, prod(sim.dis.N), prod(sim.dis.N), mean)
-            N1bᵀ = sparse(J, I, Nb, prod(sim.dis.N), prod(sim.dis.N), mean)
+            I1, J1, V, N1a, N1b =  periodic_boundary_weights(sim, 1)
+            V1 = V/dx²
         elseif :p ∈ bc[:,1]
             throw(ArgumentError("only one boundary of dimension 1 is periodic, must be both or none"))
         end
 
         if :p ∈ bc[:,2] && bc[1,2] == bc[2,2]
-            I, J, V, Na, Nb = periodic_boundary_weights(sim, 2)
-            Cᵦ  = sparse(I, J, V/dy², prod(sim.dis.N), prod(sim.dis.N))
-            Cᵦᵀ = sparse(J, I, V/dy², prod(sim.dis.N), prod(sim.dis.N))
-            N2a  = sparse(I, J, Na, prod(sim.dis.N), prod(sim.dis.N), mean)
-            N2aᵀ = sparse(J, I, Na, prod(sim.dis.N), prod(sim.dis.N), mean)
-            N2b  = sparse(I, J, Nb, prod(sim.dis.N), prod(sim.dis.N), mean)
-            N2bᵀ = sparse(J, I, Nb, prod(sim.dis.N), prod(sim.dis.N), mean)
+            I2, J2, V, N2a, N2b = periodic_boundary_weights(sim, 2)
+            V2 = V/dy²
         elseif :p ∈ bc[:,2]
             throw(ArgumentError("only one boundary of dimension 2 is periodic, must be both or none"))
         end
 
-        sim.bnd.weights[1] = Cₐ
-        sim.bnd.weights[2] = Cₐᵀ
-        sim.bnd.weights[3] = N1a
-        sim.bnd.weights[4] = N1b
-        sim.bnd.weights[5] = N1aᵀ
-        sim.bnd.weights[6] = N1bᵀ
-        sim.bnd.weights[7] = Cᵦ
-        sim.bnd.weights[8] = Cᵦᵀ
-        sim.bnd.weights[9] = N2a
-        sim.bnd.weights[10] = N2b
-        sim.bnd.weights[11] = N2aᵀ
-        sim.bnd.weights[12] = N2bᵀ
+            sim.bnd.indices[1] = I1
+            sim.bnd.indices[2] = J1
+            sim.bnd.indices[3] = I2
+            sim.bnd.indices[4] = J2
+
+        sim.bnd.weights[1] = V1
+        sim.bnd.weights[2] = V2
+
+        sim.bnd.shifts[1] = N1a
+        sim.bnd.shifts[2] = N1b
+        sim.bnd.shifts[3] = N2a
+        sim.bnd.shifts[4] = N2b
+        return nothing
     end
-    return nothing
 end
 
 """
@@ -293,7 +266,7 @@ end
 """
     I, J, V = periodic_boundary_weights(sim, dim)
 """
-function periodic_boundary_weights(sim::Simulation, dim)
+function periodic_boundary_weights(sim::Simulation, dim::Int)
     if !(iszero(sim.lat.α) || iszero(sim.lat.β-π/2))
         throw(ArgumentError("this scheme does not work for angled periodic lattices.
     This lattice has α=$(sim.lat.α) and β=$(sim.lat.β)"))
@@ -319,7 +292,7 @@ function periodic_boundary_weights(sim::Simulation, dim)
             ∂Ω[1,1] = min(0, a*(cos(α)-sin(α)*cot(β)))
             ∂Ω[2,1] = max(0, a*(cos(α)-sin(α)*cot(β)))
         else
-            return Array{Int}(undef,0), Array{Int}(undef,0), Array{Float64}(undef,0), Array{Float64}(undef,0)
+            return Array{Int}(undef,0), Array{Int}(undef,0), Array{Float64}(undef,0), Array{Int}(undef,0), Array{Int}(undef,0)
         end
         ∂Ω[2,2] = ∂Ω[2,2]-∂Ω[1,2]
         ∂Ω[1,2] = 0
@@ -330,7 +303,7 @@ function periodic_boundary_weights(sim::Simulation, dim)
             ∂Ω[1,2] = min(0, b*sin(β))
             ∂Ω[2,2] = max(0, b*sin(β))
         else
-            return Array{Int}(undef,0), Array{Int}(undef,0), Array{Float64}(undef,0), Array{Float64}(undef,0)
+            return Array{Int}(undef,0), Array{Int}(undef,0), Array{Float64}(undef,0), Array{Int}(undef,0), Array{Int}(undef,0)
         end
     else
         throw(ArgumentError("invalid dimensions $(dim)"))
@@ -392,8 +365,8 @@ function periodic_boundary_weights(sim::Simulation, dim)
     I = Array{Int}(undef, 4N[mod1(dim+1,2)])
     J = Array{Int}(undef, 4N[mod1(dim+1,2)])
     V = Array{Float64}(undef, 4N[mod1(dim+1,2)])
-    Na = Array{Float64}(undef, 4N[mod1(dim+1,2)])
-    Nb = Array{Float64}(undef, 4N[mod1(dim+1,2)])
+    Na = Array{Int}(undef, 4N[mod1(dim+1,2)])
+    Nb = Array{Int}(undef, 4N[mod1(dim+1,2)])
 
     # pg = Progress(N[mod1(dim+1,2)], PROGRESS_UPDATE_TIME::Float64, "periodic boundaries ")
     for i ∈ 1:N[mod1(dim+1,2)]
@@ -442,6 +415,7 @@ function periodic_boundary_weights(sim::Simulation, dim)
         # next!(pg)
     end
     return I, J, V, Na, Nb
+
 end
 
 
