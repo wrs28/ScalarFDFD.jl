@@ -102,22 +102,9 @@ function incident_pc_mode(sim::Simulation, k, m)
 
     prop_const, utp, wg_sim = ScalarFDFD.pc_transverse_field(sim, k, m)
 
-    XY = ScalarFDFD.bravais_coordinates_unit_cell.(sim.dis.x[1],sim.dis.x[2], Ref(wg_sim.lat))
-    X = Array{Float64}(undef,size(XY))
-    Y = Array{Float64}(undef,size(XY))
-    for i ∈ eachindex(XY)
-          X[i]=XY[i][1]
-          Y[i]=XY[i][2]
-    end
+    X = repeat(sim.dis.x[1],1,sim.dis.N[2])
+    Y = repeat(sim.dis.x[2],sim.dis.N[1],1)
     φ = utp.(X,Y)
-
-    XY = ScalarFDFD.bravais_coordinates.(sim.dis.x[1],sim.dis.x[2], Ref(wg_sim.lat))
-    X = Array{Float64}(undef,size(XY))
-    Y = Array{Float64}(undef,size(XY))
-    for i ∈ eachindex(XY)
-          X[i]=XY[i][1]
-          Y[i]=XY[i][2]
-    end
 
     if ScalarFDFD.get_asymptote(sim, sim.sct.channels[m].waveguide) ∈ [:left]
         v = wg_sim.lat.v1
@@ -133,7 +120,7 @@ function incident_pc_mode(sim::Simulation, k, m)
         β = -prop_const[1]
     end
 
-    φ₊ = φ.*exp.(1im*β*(v[1]*X+v[2]*Y))/sqrt(abs(real(β)))
+    φ₊ = φ.*exp.(+1im*β*(v[1]*X+v[2]*Y))/sqrt(abs(real(β)))
     φ₋ = zeros(ComplexF64, size(φ₊))
     φ₊₋ = φ₊ + φ₋
 
@@ -151,11 +138,11 @@ function pc_transverse_field(sim::Simulation, k, m)
     if sim.sys.domains[ScalarFDFD.get_waveguide_domains(sim, waveguide)][1].which_asymptote ∈ [:top, :bottom]
         β = (optimize(x->(sim.sct.channels[m].dispersion[1](x)-float(k))^2, 0, 2π/2wg_sim.lat.b).minimizer[1])::Float64
         k_new, ψ = eig_k(wg_sim, k, 1; kb=β)
-        ψ = ψ.*exp.(complex.(0,wg_sim.dis.x[2])*β .+ 0wg_sim.dis.x[1])[:]
+        ψ = ψ.*exp.(-complex.(0,wg_sim.dis.x[2])*β .+ 0wg_sim.dis.x[1])[:]
     else
         β = (optimize(x->(sim.sct.channels[m].dispersion[1](x)-float(k))^2, 0, 2π/2wg_sim.lat.a).minimizer[1])::Float64
         k_new, ψ = eig_k(wg_sim, k, 1; ka=β)
-        ψ = ψ.*exp.(complex.(0,wg_sim.dis.x[1])*β .+ 0wg_sim.dis.x[2])[:]
+        ψ = ψ.*exp.(-complex.(0,wg_sim.dis.x[1])*β .+ 0wg_sim.dis.x[2])[:]
     end
     if !isapprox(k_new[1],k; atol=1e-2)
         @warn "computed k $(k_new[1]) not consistent with precomputed dispersion $k."
