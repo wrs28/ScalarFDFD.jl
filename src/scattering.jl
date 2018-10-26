@@ -69,7 +69,7 @@ end
 
 function factorize_scattering_operator(sim::Simulation, k, F)
     k²= k^2
-    bl_original = set_bl!(sim, :p)
+    bl_original = ScalarFDFD.set_bl!(sim, :pole)
     try
         ∇² = laplacian(sim, k)
         N = prod(sim.dis.N)

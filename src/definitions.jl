@@ -267,7 +267,9 @@ struct Boundary
     bl::Array{Symbol,2}
     bl_depth::Array{Float64,2}
 
-    weights::Array{SparseMatrixCSC{Float64,Int},1}
+    indices::Array{Array{Int},1}
+    weights::Array{Array{Float64},1}
+    shifts::Array{Array{Int},1}
 
     function Boundary(∂Ω::Array{S,2}, bc::Array{Symbol,2}, bl::Array{Symbol,2},
         bl_depth::Array{T,2}) where S where T
@@ -304,8 +306,10 @@ struct Boundary
             ∂Ω_tr[2,j] = ∂Ω[2,j] - bl_depth[2,j]
         end
 
-        weights = Array{SparseMatrixCSC{Float64,Int}}(undef,12)
-        return new(float.(∂Ω), float.(∂Ω_tr), bc, bl, float.(bl_depth), weights)
+        indices = Array{Array{Int}}(undef, 4)
+        weights = Array{Array{Float64}}(undef, 2)
+        shifts = Array{Array{Int}}(undef, 4)
+        return new(float.(∂Ω), float.(∂Ω_tr), bc, bl, float.(bl_depth), indices, weights, shifts)
     end
 end
 
