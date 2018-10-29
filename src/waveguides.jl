@@ -280,6 +280,7 @@ function pc_waveguide_domains(pc_domain; width, direction, x0=0, y0=0, waveguide
         wvg_bulk = vcat(Domain(defect_bulk; :domain_type => bulk_domain_type))
 
         defect_bnd = line_defect_domain(pc_domain, axis, -1e4, 1e4, Nt; N_width=N_width)
+        defect_bnd = Domain(defect_bnd; :is_in_domain => whole_domain)
 
         if direction ∈ [:v, :vertical, :y, :x, :horizontal, :h]
             wvg = vcat(
