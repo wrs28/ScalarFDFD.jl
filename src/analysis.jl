@@ -1,6 +1,5 @@
 #TODO: analyze_into_waveguides account for phase, for now it's not accounted for at all
 #TODO: waveguide analysis only for perpendicular waveguides
-
 ################################################################################
 ### ANALYZE FIELD
 ################################################################################
@@ -16,11 +15,11 @@ function analyze_field(sim::Simulation, k, ψ, m; direction=:out)
     if isempty(sim.sys.waveguides)
         c = analyze_into_angular_momentum(sim, k, ψ, m, direction)
     elseif any(ispc.(sim.sys.domains[get_waveguide_domains(sim,sim.sct.channels[m].waveguide)]))
-        c = analyze_into_pc_waveguide(sim, k, ψ, m)
-    elseif (sim.sys.domains[ScalarFDFD.get_waveguide_domains(sim, sim.sct.channels[m].waveguide)][end].domain_type) == :halfspace_waveguide
-        c = analyze_into_halfspace_waveguide(sim,k,ψ,m)
+        c = analyze_into_pc_waveguide(sim, k, ψ, m, direction)
+    elseif (sim.sys.domains[ScalarFDFD.get_waveguide_   domains(sim, sim.sct.channels[m].waveguide)][end].domain_type) == :halfspace_waveguide
+        c = analyze_into_halfspace_waveguide(sim, k, ψ, m, direction)
     elseif (sim.sys.domains[ScalarFDFD.get_waveguide_domains(sim, sim.sct.channels[m].waveguide)][end].domain_type) == :planar_waveguide
-        c = analyze_into_planar_waveguide(sim, k, ψ, m)
+        c = analyze_into_planar_waveguide(sim, k, ψ, m, direction)
     else
         throw(ArgumentError("unrecognized waveguide type"))
     end
@@ -32,37 +31,40 @@ end
 """
     c = analyze_into_waveguides_pc(sim, k, ψ, m)
 """
-function analyze_into_pc_waveguide(sim::Simulation, k, ψ, m)
+function analyze_into_pc_waveguide(sim::Simulation, k, ψ, m, direction)
 
-    xs = sim.dis.x[1][1] .+ (1:sim.dis.N[1])*sim.dis.dx[1]
-    ys = sim.dis.x[2][1] .+ (1:sim.dis.N[2])*sim.dis.dx[2]
+    xs = sim.dis.x[1][1] .+ (0:sim.dis.N[1]-1)*sim.dis.dx[1]
+    ys = sim.dis.x[2][1] .+ (0:sim.dis.N[2]-1)*sim.dis.dx[2]
     ψ_itp = CubicSplineInterpolation((xs,ys),reshape(ψ[:,1],sim.dis.N[1],sim.dis.N[2]), bc=Periodic(OnCell()), extrapolation_bc=Periodic(OnCell()))
 
-    β, u_itp, wg_sim = ScalarFDFD.pc_transverse_field(sim, k, m)
+    u, _ = incident_pc_mode(sim, k, m, direction)
+    u_itp = CubicSplineInterpolation((xs,ys),reshape(u[:,1],sim.dis.N[1],sim.dis.N[2]), bc=Periodic(OnCell()), extrapolation_bc=Periodic(OnCell()))
 
-    n_quad = 300
+    wg_sim = ScalarFDFD.extract_waveguide_simulation(sim, sim.sct.channels[m].waveguide)
 
     if ScalarFDFD.get_asymptote(sim, sim.sct.channels[m].waveguide) == :left
-        xs = sim.bnd.∂Ω_tr[1,1] .+ LinRange(0, wg_sim.lat.a, n_quad)
-        ys = sim.dis.x[2]
+        wg_sim.bnd.∂Ω[1,1] = sim.bnd.∂Ω_tr[1,1]
+        wg_sim.bnd.∂Ω[2,1] = sim.bnd.∂Ω_tr[1,1] + wg_sim.lat.a
     elseif ScalarFDFD.get_asymptote(sim, sim.sct.channels[m].waveguide) == :right
-        xs = sim.bnd.∂Ω_tr[1,2] .- LinRange(0, wg_sim.lat.a, n_quad)
-        ys = sim.dis.x[2]
+        wg_sim.bnd.∂Ω_tr[2,1] = sim.bnd.∂Ω_tr[2,1]
+        wg_sim.bnd.∂Ω_tr[1,1] = sim.bnd.∂Ω_tr[2,1] - wg_sim.lat.a
     elseif ScalarFDFD.get_asymptote(sim, sim.sct.channels[m].waveguide) == :bottom
-        xs = sim.dis.x[1]
-        ys = permutedims(sim.bnd.∂Ω_tr[2,1] .+ LinRange(0, wg_sim.lat.b, n_quad))
+        wg_sim.bnd.∂Ω_tr[1,2] = sim.bnd.∂Ω_tr[1,2]
+        wg_sim.bnd.∂Ω_tr[2,2] = sim.bnd.∂Ω_tr[1,2] + wg_sim.lat.b
     elseif ScalarFDFD.get_asymptote(sim, sim.sct.channels[m].waveguide) == :top
-        xs = sim.dis.x[1]
-        ys = permutedims(sim.bnd.∂Ω_tr[2,2] .- LinRange(0, wg_sim.lat.b, n_quad))
+        wg_sim.bnd.∂Ω_tr[2,2] = sim.bnd.∂Ω_tr[2,2]
+        wg_sim.bnd.∂Ω_tr[1,2] = sim.bnd.∂Ω_tr[2,2] - wg_sim.lat.b
     else
         throw(ArgumentError("invalid asymptote $(get_asymptote(sim,sim.sct.channels[i].waveguide)) for channel $i"))
     end
 
-    dx = xs[2]-xs[1]
-    dy = ys[2]-ys[1]
-    c = β*quadrature(ψ_itp.(xs,ys).*conj(u_itp.(xs,ys)), [dx,dy])::ComplexF64
+    wg_sim2 = Simulation(wg_sim)
+    xs = wg_sim2.dis.x[1] .+ wg_sim2.dis.dx[1]
+    ys = wg_sim2.dis.x[2] .+ wg_sim2.dis.dx[2]
 
-    return c
+    c = quadrature(wg_sim2, (ψ_itp.(xs,ys).*conj(u_itp.(xs,ys)))[:]; weight=:ε)/quadrature(wg_sim2, abs2.(u_itp.(xs,ys))[:]; weight=:ε)
+
+    return c::ComplexF64
 end
 
 
@@ -123,7 +125,7 @@ end
 """
 function analyze_into_angular_momentum(sim::Simulation, k, ψ, m, direction)
 
-    nθ = NUMBER_OF_QUADRATURE_POINTS_ANG_MOM_ANALYSIS::Int
+    nθ = ANALYSIS_QUADRATURE_POINTS
     θ = LinRange(0,2π,nθ)
     dθ = θ[2]-θ[1]
 
@@ -169,11 +171,8 @@ function surface_flux(sim::Simulation,Ψ)
 
     for i in 1:size(Ψ,2)
         ψ = reshape(Ψ[sim.dis.X_idx,i],sim.dis.N_tr[1],sim.dis.N_tr[2])
-        ∇₁, ∇₂ = ScalarFDFD.grad(sim.dis.N_tr,sim.dis.dx)
-        ∇₁ψ = reshape(∇₁*ψ[:], sim.dis.N_tr[1]-1, sim.dis.N_tr[2])
-        ∇₂ψ = reshape(∇₂*ψ[:], sim.dis.N_tr[1], sim.dis.N_tr[2]-1)
-        kx = imag((∇₁ψ).*conj(ψ[1:end-1,:]+ψ[2:end,:])/2)
-        ky = imag((∇₂ψ).*conj(ψ[:,1:end-1]+ψ[:,2:end])/2)
+        kx = imag(conj(ψ[1:end-1,:]).*ψ[2:end,:]/sim.dis.dx[1])
+        ky = imag(conj(ψ[:,1:end-1]).*ψ[:,2:end]/sim.dis.dx[2])
         if sim.dis.N[1]==1
             bottom[i] = ky[1,1]
             top[i] = ky[1,end]
@@ -185,12 +184,13 @@ function surface_flux(sim::Simulation,Ψ)
             left[i]  = kx[1,1]
             right[i]  = kx[end,1]
         else
-            bottom[i] = quadrature(ky[:,1],[sim.dis.dx[1]])
-            top[i] = quadrature(ky[:,end],[sim.dis.dx[1]])
-            left[i]  = quadrature(kx[1,:],[sim.dis.dx[2]])
-            right[i]  = quadrature(kx[end,:],[sim.dis.dx[2]])
+            slice = 2
+            bottom[i] = sum(ky[slice+1:end-slice+1, slice]              )*sim.dis.dx[1]
+            top[i] =    sum(ky[slice+1:end-slice+1, end-slice+1]        )*sim.dis.dx[1]
+            left[i]  =  sum(kx[slice              , slice+1:end-slice+1])*sim.dis.dx[2]
+            right[i]  = sum(kx[end-slice+1        , slice+1:end-slice+1])*sim.dis.dx[2]
         end
-        flux[i] = top[i] + bottom[i] + right[i] + left[i]
+        flux[i] = top[i] - bottom[i] + right[i] - left[i]
     end
 
     return flux, (left,right,bottom,top)
@@ -206,9 +206,7 @@ function bulk_absorption(sim::Simulation, k, ψ)
     absorption = Array{Float64}(undef, length(k))
 
     for i ∈ eachindex(k)
-
-        Ψ = ψ[sim.dis.X_idx,i]
-        A = imag((sim.sys.ε[sim.dis.X_idx]-1im*sim.tls.D₀*sim.sys.F[sim.dis.X_idx])*k[i]^2).*abs2.(Ψ)
+        A = imag(sim.sys.ε[:]*k[i]^2).*abs2.(ψ[:,i])
         absorption[i] = quadrature(sim, A)
     end
 

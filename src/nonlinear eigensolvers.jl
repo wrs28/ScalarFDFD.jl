@@ -12,7 +12,7 @@ eigenfrequency `k` with dispersion via root-finding of `η(k) - D₀γ(k)`.
 `max_count`: the max number of CF states to compute at a time.
 `max_iter`: maximum number of iterations to include in nonlinear solve
 """
-function eig_knl(sim::Simulation, k_init::Number, η_init::Number, ka::Number, kb::Number, F::Array, u_init::Array,
+function eig_knl(sim::Simulation, k_init::Number, η_init::Number, ka::Number, kb::Number, u_init::Array,
     k_avoid=[0], disp_opt::Bool=false, tol::Float64=.5, max_count::Int=15, max_iter::Int=50)
 
     ηt, ut = eig_cf(sim, k_init, 1, η_init, ka, kb, F, u_init)
@@ -28,7 +28,7 @@ function eig_knl(sim::Simulation, k_init::Number, η_init::Number, ka::Number, k
         ind = Int
 
         while flag
-            η_temp, u_temp = eig_cf(sim, k, M, ηt[1], ka, kb, F, ut[:,1])
+            η_temp, u_temp = eig_cf(sim, k, M, ηt[1], ka, kb, ut[:,1])
             overlap = zeros(Float64,M)
             for i ∈ eachindex(overlap)
                 overlap[i] = abs(quadrature(sim,ut[:,1].*sim.sys.F[:].*F.*u_temp[:,i]))
@@ -78,7 +78,7 @@ Contour is centered on `k`, `radii` = [real radius, imag radius].
 
 `Nq` is the number of contour quadrature points.
 """
-function eig_knl(sim::Simulation, k::Number, nk::Int, radii::Union{Tuple,Array}, ka::Number, kb::Number, F::Array, Nq::Int, rank_tol::Float64, r_min::Float64)
+function eig_knl(sim::Simulation, k::Number, nk::Int, radii::Union{Tuple,Array}, ka::Number, kb::Number, Nq::Int, rank_tol::Float64, r_min::Float64)
 
     ∇² = laplacian(sim, k; ka=ka, kb=kb)
 
@@ -117,7 +117,7 @@ function eig_knl(sim::Simulation, k::Number, nk::Int, radii::Union{Tuple,Array},
         end
 
         ɛk′² = sparse(1:N, 1:N, ɛ[:]*k′², N, N)
-        χk′² = sparse(1:N, 1:N, D₀*γ(sim,k′)*F.*F0[:]*k′², N, N)
+        χk′² = sparse(1:N, 1:N, D₀*γ(sim,k′).*F0[:]*k′², N, N)
 
         A = (∇²+ɛk′²+χk′²)\M
         A₀ += A*dk′/complex(0,2π)

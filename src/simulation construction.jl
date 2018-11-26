@@ -213,6 +213,32 @@ function fix_bl!(bl)
 end
 
 
+
+"""
+    SA = absorbing_boundary_layers(sim, k)
+"""
+function absorbing_boundary_layers(sim::Simulation, k)
+
+    Σ = sim.sys.Σ
+    N = sim.dis.N
+    ε = sim.sys.ε
+
+    SA = [sparse(1:N[j], 1:N[j], Vector{ComplexF64}(undef,N[j]), N[j], N[j]) for i ∈ 1:2, j ∈ 1:2]
+    for r ∈ CartesianIndices(SA)
+        j = r[2]
+        if sim.bnd.bl[r] ∈ [:pml_out, :pml_in]
+            SA[r] = spzeros(ComplexF64,N[j],N[j])   #sparse(complex(1.,0)I, N[j], N[j])
+        else
+            SA[r] = sparse(1:N[j], 1:N[j], 0 .+ 1im*Σ[r]/real(k), N[j], N[j])
+        end
+    end
+
+    return SA
+end
+
+
+
+
 ################################################################################
 ###############  STANDARD DOMAINS  #######################################
 ################################################################################

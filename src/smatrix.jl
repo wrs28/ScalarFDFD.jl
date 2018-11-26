@@ -4,12 +4,15 @@
 
 scattering matrix `S` at frequences `k` on `channels`
 """
-function smatrix(sim::Simulation, k; is_linear=true, F=[1], disp_opt=true, file_name="",
-                    num_wg_bands_multiplier=1.8, num_bloch=17, num_free_bands=2)
+function smatrix(sim::Simulation, k; is_linear=true, disp_opt=true, file_name="", is_parallel=nprocs()>1, num_channel_blocks=1)
 
-    build_dispersions!(sim; num_wg_bands_multiplier=num_wg_bands_multiplier, num_bloch=num_bloch, num_free_bands=num_free_bands)
-
-    S, scattered_flux, total_flux, absorption = smatrix_l(sim, k, 1:length(sim.sct.channels), F, disp_opt, file_name)
+    if is_linear && !is_parallel
+        S, scattered_flux, total_flux, absorption = smatrix_l(sim, k, 1:length(sim.sct.channels), disp_opt, file_name)
+    elseif is_linear && is_parallel
+        S, scattered_flux, total_flux, absorption = smatrix_lp(sim, k, disp_opt, file_name, num_channel_blocks)
+    else
+        throw("no nonlinear method has yet been defined.")
+    end
 
     return S, scattered_flux, total_flux, absorption
 end
@@ -18,7 +21,9 @@ end
 """
     smatrix_l(sim, k, channels, F, disp_opt, file_name)
 """
-function smatrix_l(sim::Simulation, k, channels, F, disp_opt, file_name)
+function smatrix_l(sim::Simulation, k, channels, disp_opt, file_name)
+
+    build_dispersions!(sim)
 
     nc = length(channels)
     nk = length(k)
@@ -36,13 +41,13 @@ function smatrix_l(sim::Simulation, k, channels, F, disp_opt, file_name)
 
     for i ∈ eachindex(k)
 
-        ζ = factorize_scattering_operator(sim, k[i], F)
+        ζ = factorize_scattering_operator(sim, k[i])
 
         for m in 1:nc
             a = 0a
             a[channels[m]] = 1.
-            ψ_sct, ψ_tot, ψ_out, ζ = scattering(sim, k[i], a; F=F, H=ζ, is_linear=true)
-            for m′ in 1:M
+            ψ_sct, ψ_tot, ψ_out, ζ = scattering(sim, k[i], a; H=ζ, is_linear=true)
+            for m′ ∈ 1:M
                 if isempty(sim.sys.waveguides)
                     c = analyze_field(sim, k[i], ψ_out, m′)
                 else

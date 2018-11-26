@@ -7,7 +7,7 @@
 ################################################################################
 """
     K = eig_k(sim, k, nk, systems::Array{System}, twolevelsystems::Array{TwoLevelSystem},
-    lattices::Array{Bravais}; ka=0, kb=0, F=[1], disp_opt=true)
+    lattices::Array{Bravais}; ka=0, kb=0, disp_opt=true)
 
 computes spectra of parametrically tuned simulations in parallel.
 
@@ -25,61 +25,61 @@ function eig_k(sim::Simulation, k::Number, nk::Int,
     systems::Array{System,M},
     twolevelsystems::Array{TwoLevelSystem,M}=[sim.tls for i ∈ CartesianIndices(systems)],
     lattices::Array{Bravais,M}=[sim.lat for i ∈ CartesianIndices(systems)];
-    ka=0, kb=0, F=[1], ψ_init=[], disp_opt=true) where M
+    ka=0, kb=0, disp_opt=true) where M
 
-    K = eig_p(eig_klp, sim, k, nk, systems, twolevelsystems, lattices, ka, kb, 0, F, ψ_init, disp_opt)
+    K = eig_p(eig_klp, sim, k, nk, systems, twolevelsystems, lattices, ka, kb, 0, disp_opt)
     return K
 end
 function eig_k(sim::Simulation, k::Number, nk::Int,
     systems::Array{System,M},
     lattices::Array{Bravais,M},
     twolevelsystems::Array{TwoLevelSystem,M}=[sim.tls for i ∈ CartesianIndices(systems)];
-    ka=0, kb=0, F=[1], ψ_init=[], disp_opt=true) where M
+    ka=0, kb=0, disp_opt=true) where M
 
-    K = eig_k(sim, k, nk, systems, twolevelsystems, lattices; ka=ka, kb=kb, F=F, ψ_init=ψ_init, disp_opt=disp_opt)
+    K = eig_k(sim, k, nk, systems, twolevelsystems, lattices; ka=ka, kb=kb, disp_opt=disp_opt)
     return K
 end
 function eig_k(sim::Simulation, k::Number, nk::Int,
     twolevelsystems::Array{TwoLevelSystem,M},
     systems::Array{System,M}=[sim.sys for i ∈ CartesianIndices(twolevelsystems)],
     lattices::Array{Bravais,M}=[sim.lat for i ∈ CartesianIndices(twolevelsystems)];
-    ka=0, kb=0, F=[1], ψ_init=[], disp_opt=true) where M
+    ka=0, kb=0, disp_opt=true) where M
 
-    K = eig_k(sim, k, nk, systems, twolevelsystems, lattices; ka=ka, kb=kb, F=F, ψ_init=ψ_init, disp_opt=disp_opt)
+    K = eig_k(sim, k, nk, systems, twolevelsystems, lattices; ka=ka, kb=kb, disp_opt=disp_opt)
     return K
 end
 function eig_k(sim::Simulation, k::Number, nk::Int,
     twolevelsystems::Array{TwoLevelSystem,M},
     lattices::Array{Bravais,M},
     systems::Array{System,M}=[sim.sys for i ∈ CartesianIndices(twolevelsystems)];
-    ka=0, kb=0, F=[1], ψ_init=[], disp_opt=true) where M
+    ka=0, kb=0, disp_opt=true) where M
 
-    K = eig_k(sim, k, nk, systems, twolevelsystems, lattices; ka=ka, kb=kb, F=F, ψ_init=ψ_init, disp_opt=disp_opt)
+    K = eig_k(sim, k, nk, systems, twolevelsystems, lattices; ka=ka, kb=kb, disp_opt=disp_opt)
     return K
 end
 function eig_k(sim::Simulation, k::Number, nk::Int,
     lattices::Array{Bravais,M},
     systems::Array{System,M}=[sim.sys for i ∈ CartesianIndices(lattices)],
     twolevelsystems::Array{TwoLevelSystem,M}=[sim.tls for i ∈ CartesianIndices(lattices)];
-    ka=0, kb=0, F=[1], ψ_init=[], disp_opt=true) where M
+    ka=0, kb=0, disp_opt=true) where M
 
-    K = eig_k(sim, k, nk, systems, twolevelsystems, lattices; ka=ka, kb=kb, F=F, ψ_init=ψ_init, disp_opt=disp_opt)
+    K = eig_k(sim, k, nk, systems, twolevelsystems, lattices; ka=ka, kb=kb, disp_opt=disp_opt)
     return K
 end
 function eig_k(sim::Simulation, k::Number, nk::Int,
     lattices::Array{Bravais,M},
     twolevelsystems::Array{TwoLevelSystem,M},
     systems::Array{System,M}=[sim.sys for i ∈ CartesianIndices(lattices)];
-    ka=0, kb=0, F=[1], ψ_init=[], disp_opt=true) where M
+    ka=0, kb=0, disp_opt=true) where M
 
-    K = eig_k(sim, k, nk, systems, twolevelsystems, lattices; ka=ka, kb=kb, F=F, ψ_init=ψ_init, disp_opt=disp_opt)
+    K = eig_k(sim, k, nk, systems, twolevelsystems, lattices; ka=ka, kb=kb, disp_opt=disp_opt)
     return K
 end
 
 
 """
     K = eig_cf(sim, k, nk, systems::Array{System}, twolevelsystems::Array{TwoLevelSystem},
-    lattices::Array{Bravais}; ka=0, kb=0, F=[1], disp_opt=true)
+    lattices::Array{Bravais}; ka=0, kb=0, disp_opt=true)
 
 computes spectra of parametrically tuned simulations in parallel.
 
@@ -97,54 +97,54 @@ function eig_cf(sim::Simulation, k, ncf::Int,
     systems::Array{System,M},
     twolevelsystems::Array{TwoLevelSystem,M}=[sim.tls for i ∈ CartesianIndices(systems)],
     lattices::Array{Bravais,M}=[sim.lat for i ∈ CartesianIndices(systems)];
-    η_init=0, ka=0, kb=0, F=[1], ψ_init=[], disp_opt=true) where M
+    η_init=0, ka=0, kb=0, disp_opt=true) where M
 
-    K = eig_p(eig_cfp, sim, k, ncf, systems, twolevelsystems, lattices, η_init, ka, kb, 0, F, ψ_init, disp_opt)
+    K = eig_p(eig_cfp, sim, k, ncf, systems, twolevelsystems, lattices, η_init, ka, kb, 0, disp_opt)
     return K
 end
 function eig_cf(sim::Simulation, k, ncf::Int,
     systems::Array{System,M},
     lattices::Array{Bravais,M},
     twolevelsystems::Array{TwoLevelSystem,M}=[sim.tls for i ∈ CartesianIndices(systems)];
-    η_init=0, ka=0, kb=0, F=[1], ψ_init=[], disp_opt=true) where M
+    η_init=0, ka=0, kb=0, disp_opt=true) where M
 
-    K = eig_cf(sim, k, ncf, systems, twolevelsystems, lattices; η_init=η_init, ka=ka, kb=kb, F=F, ψ_init=ψ_init, disp_opt=disp_opt)
+    K = eig_cf(sim, k, ncf, systems, twolevelsystems, lattices; η_init=η_init, ka=ka, kb=kb, disp_opt=disp_opt)
     return K
 end
 function eig_cf(sim::Simulation, k, ncf::Int,
     twolevelsystems::Array{TwoLevelSystem,M},
     systems::Array{System,M}=[sim.sys for i ∈ CartesianIndices(twolevelsystems)],
     lattices::Array{Bravais,M}=[sim.lat for i ∈ CartesianIndices(twolevelsystems)];
-    η_init=0, ka=0, kb=0, F=[1], ψ_init=[], disp_opt=true) where M
+    η_init=0, ka=0, kb=0, disp_opt=true) where M
 
-    K = eig_cf(sim, k, ncf, systems, twolevelsystems, lattices; η_init=η_init, ka=ka, kb=kb, F=F, ψ_init=ψ_init, disp_opt=disp_opt)
+    K = eig_cf(sim, k, ncf, systems, twolevelsystems, lattices; η_init=η_init, ka=ka, kb=kb, disp_opt=disp_opt)
     return K
 end
 function eig_cf(sim::Simulation, k, ncf::Int,
     twolevelsystems::Array{TwoLevelSystem,M},
     lattices::Array{Bravais,M},
     systems::Array{System,M}=[sim.sys for i ∈ CartesianIndices(twolevelsystems)];
-    η_init=0, ka=0, kb=0, F=[1], ψ_init=[], disp_opt=true) where M
+    η_init=0, ka=0, kb=0, disp_opt=true) where M
 
-    K = eig_cf(sim, k, ncf, systems, twolevelsystems, lattices; η_init=η_init, ka=ka, kb=kb, F=F, ψ_init=ψ_init, disp_opt=disp_opt)
+    K = eig_cf(sim, k, ncf, systems, twolevelsystems, lattices; η_init=η_init, ka=ka, kb=kb, disp_opt=disp_opt)
     return K
 end
 function eig_cf(sim::Simulation, k, ncf::Int,
     lattices::Array{Bravais,M},
     systems::Array{System,M}=[sim.sys for i ∈ CartesianIndices(lattices)],
     twolevelsystems::Array{TwoLevelSystem,M}=[sim.tls for i ∈ CartesianIndices(lattices)];
-    η_init=0, ka=0, kb=0, F=[1], ψ_init=[], disp_opt=true) where M
+    η_init=0, ka=0, kb=0, disp_opt=true) where M
 
-    K = eig_cf(sim, k, ncf, systems, twolevelsystems, lattices; η_init=η_init, ka=ka, kb=kb, F=F, ψ_init=ψ_init, disp_opt=disp_opt)
+    K = eig_cf(sim, k, ncf, systems, twolevelsystems, lattices; η_init=η_init, ka=ka, kb=kb, disp_opt=disp_opt)
     return K
 end
 function eig_cf(sim::Simulation, k, ncf::Int,
     lattices::Array{Bravais,M},
     twolevelsystems::Array{TwoLevelSystem,M},
     systems::Array{System,M}=[sim.sys for i ∈ CartesianIndices(lattices)];
-    η_init=0, ka=0, kb=0, F=[1], ψ_init=[], disp_opt=true) where M
+    η_init=0, ka=0, kb=0, disp_opt=true) where M
 
-    K = eig_cf(sim, k, ncf, systems, twolevelsystems, lattices; η_init=η_init, ka=ka, kb=kb, F=F, ψ_init=ψ_init, disp_opt=disp_opt)
+    K = eig_cf(sim, k, ncf, systems, twolevelsystems, lattices; η_init=η_init, ka=ka, kb=kb, disp_opt=disp_opt)
     return K
 end
 
@@ -153,21 +153,21 @@ end
 ### EIGENVALUE SOLVERS OVER PARAMETERS, CORE
 ################################################################################
 """
-    E = eig_p(eig_fun, sim, k, systems, twolevelsystems, lattices, ka, kb, η_init, F, ψ_init, disp_opt)
+    E = eig_p(eig_fun, sim, k, systems, twolevelsystems, lattices, ka, kb, η_init, disp_opt)
 """
 function eig_p(eig_fun::Function, sim::Simulation, k, nk::Int,
     systems::Array{System,M},
     twolevelsystems::Array{TwoLevelSystem,M},
     lattices::Array{Bravais,M},
-    ka=0, kb=0, η_init=0, F=[1], ψ_init=[], disp_opt=true) where M
+    ka=0, kb=0, η_init=0, disp_opt=true) where M
 
     E = Array{ComplexF64}(undef, nk, size(systems)...)
 
     sim = Simulation(sim; sys=systems[1], tls=twolevelsystems[1], lattice=lattices[1])
     if eig_fun == eig_klp
-        E[:,fill(1,M)...] = eig_k(sim, k, nk; ka=ka, kb=kb, F=F, ψ_init=ψ_init)[1]
+        E[:,fill(1,M)...] = eig_k(sim, k, nk; ka=ka, kb=kb, )[1]
     elseif eig_fun == eig_cfp
-        E[:,fill(1,M)...] = eig_cf(sim, k[1], nk; η_init=η_init, ka=ka, kb=kb, F=F, ψ_init=ψ_init)[1]
+        E[:,fill(1,M)...] = eig_cf(sim, k[1], nk; η_init=η_init, ka=ka, kb=kb, )[1]
     else
         throw(ArgumentError("parametric parallization only available for linear eig_k and eig_cf at present."))
     end
@@ -199,14 +199,12 @@ function eig_p(eig_fun::Function, sim::Simulation, k, nk::Int,
 
         kas = [0 for i ∈ CartesianIndices(E[e_inds...])]
         kbs = [0 for i ∈ CartesianIndices(E[e_inds...])]
-        Fs = [[1] for i ∈ CartesianIndices(E[e_inds...])]
-        ψ_inits = [[] for i ∈ CartesianIndices(E[e_inds...])]
 
         if eig_fun == eig_klp
-            args = (sims, Es, syss, tlss, lats, kas, kbs, Fs)
+            args = (sims, Es, syss, tlss, lats, kas, kbs)
         elseif eig_fun == eig_cflp
             ks = [k[e_inds...][i] for i ∈ CartesianIndices(E[e_inds...])]
-            args = (sims, ks, syss, tlss, lats, Es, kas, kbs, Fs, ψ_inits)
+            args = (sims, ks, syss, tlss, lats, Es, kas, kbs)
         else
             throw(ArgumentError("parametric parallization only available for linear eig_k and eig_cf at present."))
         end
@@ -225,38 +223,38 @@ function eig_p(eig_fun::Function, sim::Simulation, k, nk::Int,
 end
 
 """
-    K = eig_klp(sim, k, systems, twolevelsystems, lattices, ka, kb, F, ψ_init)
+    K = eig_klp(sim, k, systems, twolevelsystems, lattices, ka, kb)
 """
 function eig_klp(sim::Simulation, k::Number,
     syss::Array{System,M},
     tlss::Array{TwoLevelSystem,M},
     lattices::Array{Bravais,M},
-    ka, kb, F, ψ_init) where M
+    ka, kb) where M
 
     K = Array{ComplexF64}(undef,length(syss))
     K[1] = k
     for i ∈ 2:length(syss)
         sim = Simulation(sim; sys=syss[i], tls=tlss[i], lattice=lattices[i])
-        K[i] = eig_kl(sim, K[i-1], 1, ka, kb, F, ψ_init)[1][1]
+        K[i] = eig_kl(sim, K[i-1], 1, ka, kb)[1][1]
     end
     return K
 end
 
 
 """
-    H = eig_cfp(sim, k, systems, twolevelsystems, lattices, η_init, ka, kb, F, ψ_init)
+    H = eig_cfp(sim, k, systems, twolevelsystems, lattices, η_init, ka, kb)
 """
 function eig_cfp(sim::Simulation, k::Array{Number,M},
     syss::Array{System,M},
     tlss::Array{TwoLevelSystem,M},
     lattices::Array{Bravais,M},
-    η_init, ka, kb, F, ψ_init) where M
+    η_init, ka, kb) where M
 
     H = Array{ComplexF64}(undef,length(syss))
     H[1] = η_init
     for i ∈ 2:length(syss)
         sim = Simulation(sim; sys=syss[i], tls=tlss[i], lattice=lattices[i])
-        H[i] = eig_kl(sim, k[i-1], 1, E[i-1], ka, kb, F, ψ_init)[1][1]
+        H[i] = eig_kl(sim, k[i-1], 1, E[i-1], ka, kb)[1][1]
     end
     return K
 end
@@ -265,9 +263,9 @@ end
 ### CONTOUR EIGENSOLVER PARALLEL
 ################################################################################
 """
-    eig_knlp(sim, k, nk, radii; F=[1], r_min=.01, Nq=100, rank_tol=1e-8)
+    eig_knlp(sim, k, nk, radii; r_min=.01, Nq=100, rank_tol=1e-8)
 """
-function eig_knlp(sim::Simulation, k::Number, nk::Int, radii, ka=0, kb=0, F=[1], Nq=100, rank_tol=1e-8, r_min=.01)
+function eig_knlp(sim::Simulation, k::Number, nk::Int, radii, ka=0, kb=0, Nq=100, rank_tol=1e-8, r_min=.01)
 
     ∇² = laplacian(sim, k; ka=ka, kb=kb)
 
@@ -373,15 +371,13 @@ function bands_only_p(
     sims = [sim for i ∈ CartesianIndices(ka_bloch)]
     ks = [0.01 for i ∈ CartesianIndices(ka_bloch)]
     num_bandss = [num_bands for i ∈ CartesianIndices(ka_bloch)]
-    Fs = [[1] for i ∈ CartesianIndices(ka_bloch)]
-    ψ_inits = [[] for i ∈ CartesianIndices(ka_bloch)]
     kas = [ka_bloch[i] for i ∈ CartesianIndices(ka_bloch)]
     kbs = [kb_bloch[i] for i ∈ CartesianIndices(ka_bloch)]
 
     if typeof(pg) <: Progress
-        B = progress_pmap(eig_kl, sims, ks, num_bandss, kas, kbs, Fs, ψ_inits; progress=pg)
+        B = progress_pmap(eig_kl, sims, ks, num_bandss, kas, kbs; progress=pg)
     else
-        B = pmap(eig_kl, sims, ks, num_bandss, kas, kbs, Fs, ψ_inits)
+        B = pmap(eig_kl, sims, ks, num_bandss, kas, kbs)
     end
     bands = Array{ComplexF64, M+1}(undef, num_bands, size(ka_bloch)...)
     for i ∈ CartesianIndices(ka_bloch)
@@ -414,25 +410,6 @@ end
 
 
 ################################################################################
-### WAVEGUIDE DISPERSION
-################################################################################
-function build_dispersions_p!(sim::Simulation;
-    num_wg_bands=round(Int,1.5*max(sim.lat.a/sim.lat.b,sim.lat.b/sim.lat.a)),
-    num_bloch=17, num_free_bands=2)
-
-    build_dispersions!(sim; num_wg_bands=num_wg_bands, num_bloch=num_bloch, num_free_bands=num_free_bands, parallel=true)
-    return nothing
-end
-
-function waveguide_dispersion_p(sim::Simulation, waveguide::Int;
-    num_wg_bands=round(Int,1.5*max(sim.lat.a/sim.lat.b,sim.lat.b/sim.lat.a)),
-    num_free_bands=2, num_bloch=17, interpolation=:cubic)
-
-    wg_dispersion, ks, bands, gaps = waveguide_dispersion_p(sim, waveguide; num_wg_bands=num_wg_bands, num_free_bands=num_free_bands, num_bloch=num_bloch, parallel=true, interpolation=interpolation)
-    return wg_dispersion, ks, bands, gaps
-end
-
-################################################################################
 ### S-MATRIX
 ################################################################################
 """
@@ -449,13 +426,9 @@ it is generally not recommended to have this number be anything other than 1.
 It is envisioned that this might be useful when only a few frequencies are needed
 but many channels (such as might be the case with angular momentum channels).
 """
-function smatrix_p(sim::Simulation, k; F=[1],
-            is_linear=true, disp_opt=true, file_name="",
-            num_wg_bands=round(Int,1.5*max(sim.lat.a/sim.lat.b,sim.lat.b/sim.lat.a)),
-            num_bloch=17, num_free_bands=2,
-            num_channel_blocks=1)
+function smatrix_lp(sim::Simulation, k, disp_opt=true, file_name="", num_channel_blocks=1)
 
-    build_dispersion_p!(sim; num_wg_bands=num_wg_bands, num_bloch=num_bloch, num_free_bands=num_free_bands)
+    build_dispersions!(sim; parallel=true)
 
     # set up iterations
     nc = length(sim.sct.channels)
@@ -466,15 +439,14 @@ function smatrix_p(sim::Simulation, k; F=[1],
     sims = [deepcopy(sim) for i ∈ k for j ∈ 1:num_channel_blocks]
     ks = [i for i ∈ k for j ∈ 1:num_channel_blocks]
     channels = [channel_inds[j]:channel_inds[j+1]-1 for i ∈ k for j ∈ 1:num_channel_blocks]
-    Fs = [F for i ∈ k for j ∈ 1:num_channel_blocks]
     disp_opts = [false for i ∈ k for j ∈ 1:num_channel_blocks]
     file_names = ["" for i ∈ k for j ∈ 1:num_channel_blocks]
 
     # parallel map
     if disp_opt
-        C = progress_pmap(smatrix_l, sims, ks, channels, Fs, disp_opts, file_names; progress=Progress(length(ks), PROGRESS_UPDATE_TIME::Float64,"smatrix_p "))
+        C = progress_pmap(smatrix_l, sims, ks, channels, disp_opts, file_names; progress=Progress(length(ks), PROGRESS_UPDATE_TIME::Float64,"smatrix_p "))
     else
-        C = pmap(smatrix_l, sims, ks, channels, Fs, disp_opts, file_names)
+        C = pmap(smatrix_l, sims, ks, channels, disp_opts, file_names)
     end
 
     # repackage results

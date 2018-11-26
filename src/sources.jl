@@ -56,13 +56,13 @@ end
 """
 function incident_mode(sim::Simulation, k, m)
     if isempty(sim.sys.domains[ScalarFDFD.get_waveguide_domains(sim, sim.sct.channels[m].waveguide)])
-        φ₊₋, φ₊, φ₋ = incident_free_space_mode(sim, k, m)
+        φ₊₋, φ₊, φ₋ = incident_free_space_mode(sim, k, m, :in)
     elseif ScalarFDFD.ispc(sim.sys.domains[ScalarFDFD.get_waveguide_domains(sim, sim.sct.channels[m].waveguide)][end])
-        φ₊₋, φ₊, φ₋ = incident_pc_mode(sim, k, m)
+        φ₊₋, φ₊, φ₋ = incident_pc_mode(sim, k, m, :in)
     elseif ishalfspace(sim.sys.domains[ScalarFDFD.get_waveguide_domains(sim, sim.sct.channels[m].waveguide)][1])
-        φ₊₋, φ₊, φ₋ = ScalarFDFD.incident_halfspace_mode(sim, k, m)
+        φ₊₋, φ₊, φ₋ = ScalarFDFD.incident_halfspace_mode(sim, k, m, :in)
     elseif  ScalarFDFD.isplanar(sim.sys.domains[ScalarFDFD.get_waveguide_domains(sim, sim.sct.channels[m].waveguide)][1])
-        φ₊₋, φ₊, φ₋ = ScalarFDFD.incident_planar_mode(sim, k, m)
+        φ₊₋, φ₊, φ₋ = ScalarFDFD.incident_planar_mode(sim, k, m, :in)
     else
         throw(ArgumentError("unrecognized waveguide type"))
     end
@@ -77,7 +77,7 @@ end
 """
     φ₊₋, φ₊, φ₋ = incident_free_space_mode(sim, k, m)
 """
-function incident_free_space_mode(sim::Simulation, k, m)
+function incident_free_space_mode(sim::Simulation, k, m, direction)
 
     x = sim.dis.x[1]
     y = sim.dis.x[2]
@@ -98,29 +98,23 @@ end
 """
     φ₊₋, φ₊, φ₋, φ_interpolation = incident_pc_mode(sim, k, m)
 """
-function incident_pc_mode(sim::Simulation, k, m)
+function incident_pc_mode(sim::Simulation, k, m, direction)
 
-    prop_const, utp, wg_sim = ScalarFDFD.pc_transverse_field(sim, k, m)
+    β, ψ, wg_sim = ScalarFDFD.pc_transverse_field(sim, k, m, direction)
+
+    ψ = ψ.*exp.(-complex.(0,wg_sim.dis.x[1])*β[1] .- complex.(0,wg_sim.dis.x[2])*β[2])[:]
+    xs = wg_sim.dis.x[1][1] .+ (0:wg_sim.dis.N[1]-1)*wg_sim.dis.dx[1]
+    ys = wg_sim.dis.x[2][1] .+ (0:wg_sim.dis.N[2]-1)*wg_sim.dis.dx[2]
+    utp = CubicSplineInterpolation((xs,ys),reshape(ψ[:,1],wg_sim.dis.N[1],wg_sim.dis.N[2]), bc=Periodic(OnCell()), extrapolation_bc=Periodic(OnCell()))
 
     X = repeat(sim.dis.x[1],1,sim.dis.N[2])
     Y = repeat(sim.dis.x[2],sim.dis.N[1],1)
+
+    v1 = wg_sim.lat.v1
+    v2 = wg_sim.lat.v2
+
     φ = utp.(X,Y)
-
-    if ScalarFDFD.get_asymptote(sim, sim.sct.channels[m].waveguide) ∈ [:left]
-        v = wg_sim.lat.v1
-        β = +prop_const[1]
-    elseif ScalarFDFD.get_asymptote(sim, sim.sct.channels[m].waveguide) ∈ [:right]
-        v = wg_sim.lat.v1
-        β = -prop_const[1]
-    elseif ScalarFDFD.get_asymptote(sim, sim.sct.channels[m].waveguide) ∈ [:bottom]
-        v = wg_sim.lat.v2
-        β = +prop_const[1]
-    elseif ScalarFDFD.get_asymptote(sim, sim.sct.channels[m].waveguide) ∈ [:top]
-        v = wg_sim.lat.v2
-        β = -prop_const[1]
-    end
-
-    φ₊ = φ.*exp.(+1im*β*(v[1]*X+v[2]*Y))/sqrt(abs(real(β)))
+    φ₊ = φ.*exp.(1im*(β[1]*(v1[1]*X + v1[2]*Y) + β[2]*(v2[1]*X + v2[2]*Y)))
     φ₋ = zeros(ComplexF64, size(φ₊))
     φ₊₋ = φ₊ + φ₋
 
@@ -131,27 +125,74 @@ end
 """
     pc_transverse_field(sim, k, m)
 """
-function pc_transverse_field(sim::Simulation, k, m)
+function pc_transverse_field(sim::Simulation, k, m, direction)
 
     waveguide = sim.sct.channels[m].waveguide
     wg_sim = extract_waveguide_simulation(sim, waveguide)
-    if sim.sys.domains[ScalarFDFD.get_waveguide_domains(sim, waveguide)][1].which_asymptote ∈ [:top, :bottom]
-        β = (optimize(x->(sim.sct.channels[m].dispersion[1](x)-float(k))^2, 0, 2π/2wg_sim.lat.b).minimizer[1])::Float64
-        k_new, ψ = eig_k(wg_sim, k, 1; kb=β)
-        ψ = ψ.*exp.(-complex.(0,wg_sim.dis.x[2])*β .+ 0wg_sim.dis.x[1])[:]
+    β = [0.,0.]
+    if sim.sys.domains[ScalarFDFD.get_waveguide_domains(sim, waveguide)][1].which_asymptote == :bottom
+        if direction == :in
+            sol = optimize(x->(sim.sct.channels[m].dispersion[1](x)-float(k))^2, 0, +π/wg_sim.lat.b)
+            β[2] = (sol.minimizer[1])::Float64
+        else
+            sol = optimize(x->(sim.sct.channels[m].dispersion[1](x)-float(k))^2, -π/wg_sim.lat.b, 0)
+            β[2] = (sol.minimizer[1])::Float64
+        end
+    elseif sim.sys.domains[ScalarFDFD.get_waveguide_domains(sim, waveguide)][1].which_asymptote == :top
+        if direction == :in
+            sol = optimize(x->(sim.sct.channels[m].dispersion[1](x)-float(k))^2, -π/wg_sim.lat.b, 0)
+            β[2] = (sol.minimizer[1])::Float64
+        else
+            sol = optimize(x->(sim.sct.channels[m].dispersion[1](x)-float(k))^2, 0, +π/wg_sim.lat.b)
+            β[2] = (sol.minimizer[1])::Float64
+        end
+    elseif sim.sys.domains[ScalarFDFD.get_waveguide_domains(sim, waveguide)][1].which_asymptote == :left
+        if direction == :in
+            sol = optimize(x->(sim.sct.channels[m].dispersion[1](x)-float(k))^2, 0, +π/wg_sim.lat.a)
+            β[1] = (sol.minimizer[1])::Float64
+        else
+            sol = optimize(x->(sim.sct.channels[m].dispersion[1](x)-float(k))^2, -π/wg_sim.lat.a, 0)
+            β[1] = (sol.minimizer[1])::Float64
+        end
     else
-        β = (optimize(x->(sim.sct.channels[m].dispersion[1](x)-float(k))^2, 0, 2π/2wg_sim.lat.a).minimizer[1])::Float64
-        k_new, ψ = eig_k(wg_sim, k, 1; ka=β)
-        ψ = ψ.*exp.(-complex.(0,wg_sim.dis.x[1])*β .+ 0wg_sim.dis.x[2])[:]
+        if direction == :in
+            sol = optimize(x->(sim.sct.channels[m].dispersion[1](x)-float(k))^2, -π/wg_sim.lat.a, 0)
+            β[1] = (sol.minimizer[1])::Float64
+        else
+            sol = optimize(x->(sim.sct.channels[m].dispersion[1](x)-float(k))^2, 0, +π/wg_sim.lat.a)
+            β[1] = (sol.minimizer[1])::Float64
+        end
+    end
+    if !Optim.converged(sol)
+        return NaN, zeros(ComplexF64, prod(wg_sim.dis.N), 1), wg_sim
+    end
+    if sim.sys.domains[ScalarFDFD.get_waveguide_domains(sim, waveguide)][1].which_asymptote ∈ [:bottom, :top]
+        f(x) = abs2.(eig_k(wg_sim, k, 1; kb=x[1])[1][1]-k)
+        a = optimize(f,[β[2]],BFGS(), Optim.Options(g_tol=1e-10, f_tol=1e-10))
+        β[2] = a.minimizer[1]::Float64
+        k_new, ψ = eig_k(wg_sim, k, 1; kb=β[2])
+        if sim.sys.domains[ScalarFDFD.get_waveguide_domains(sim, waveguide)][1].which_asymptote == :top
+            𝒩² = surface_flux(wg_sim, ψ)[2][4][1]
+        else
+            𝒩² = surface_flux(wg_sim, ψ)[2][3][1]
+        end
+    else
+        g(x) = abs2.(eig_k(wg_sim, k, 1; ka=x[1])[1][1]-k)
+        a = optimize(g,[β[1]],BFGS(), Optim.Options(g_tol=1e-10, f_tol=1e-10))
+        β[1] = a.minimizer[1]::Float64
+        k_new, ψ = eig_k(wg_sim, k, 1; ka=β[1])
+        if sim.sys.domains[ScalarFDFD.get_waveguide_domains(sim, waveguide)][1].which_asymptote == :right
+            𝒩² = surface_flux(wg_sim, ψ)[2][2][1]
+        else
+            𝒩² = surface_flux(wg_sim, ψ)[2][1][1]
+        end
     end
     if !isapprox(k_new[1],k; atol=1e-2)
         @warn "computed k $(k_new[1]) not consistent with precomputed dispersion $k."
     end
-    ψ = ψ*exp(-complex(0,angle(ψ[findmax(abs.(ψ))[2]])))/sqrt(quadrature(wg_sim, abs2.(ψ[:])))
-    xs = wg_sim.dis.x[1][1] .+ (1:wg_sim.dis.N[1])*wg_sim.dis.dx[1]
-    ys = wg_sim.dis.x[2][1] .+ (1:wg_sim.dis.N[2])*wg_sim.dis.dx[2]
-    utp = CubicSplineInterpolation((xs,ys),reshape(ψ[:,1],wg_sim.dis.N[1],wg_sim.dis.N[2]), bc=Periodic(OnCell()), extrapolation_bc=Periodic(OnCell()))
-    return β, utp, wg_sim
+    gauge_fixing = exp(-complex(0,angle(ψ[findmax(abs.(ψ))[2]])))
+    ψ = ψ*gauge_fixing/sqrt(abs(𝒩²))
+    return β, ψ, wg_sim
 end
 
 
@@ -161,7 +202,7 @@ end
 """
     φ₊₋, φ₊, φ₋ = incident_halfspace_mode(sim, k, m)
 """
-function incident_halfspace_mode(sim::Simulation, k, m)
+function incident_halfspace_mode(sim::Simulation, k, m, direction::Symbol)
 
     c, prop_const = ScalarFDFD.halfspace_transverse_field(sim, k, m)
 
@@ -275,7 +316,9 @@ function planar_transverse_field(sim::Simulation, k, m)
     wg_sim = extract_waveguide_simulation(sim, sim.sct.channels[m].waveguide)
 
     k_new, ψ = ScalarFDFD.planar_kl(wg_sim, β, k, 1)
-    ψ = ψ*exp(-complex(0,angle(ψ[findmax(abs.(ψ))[2]])))/sqrt(quadrature(wg_sim, abs2.(ψ[:])))
+    𝒩² = quadrature(wg_sim, abs2.(ψ[:]))
+    gauge_fixing = exp(-complex(0,angle(ψ[findmax(abs.(ψ))[2]])))
+    ψ = ψ*gauge_fixing/sqrt(𝒩²)
     if !isapprox(k_new[1],k; atol=1e-2)
         @warn "computed k $(k_new[1]) not consistent with precomputed dispersion $k."
     end

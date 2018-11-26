@@ -2,100 +2,39 @@
 ## QUADRATURE
 ################################################################################
 """
-    ∫f(z) dz = quadrature(sim, f)
+    ∫f(z) dz = quadrature(sim, f; weight=:none)
 
-multi-dimensional integral of f, uses trapezoidal rule if number of quadrature
-points is even and simpson if odd in each dimension.
+multi-dimensional integral of f. really just sum over sites.
 """
-function quadrature(sim::Simulation, f::AbstractArray{T,1}) where T
-    if length(f)==prod(sim.dis.N_tr)
-        quadrature(f, sim.dis.N_tr, sim.dis.dx)
+function quadrature(sim::Simulation, f::AbstractArray{T,N}; weight=:none, k=1) where T where N
+
+    if weight == :ε
+        Σ = sum(f[:].*sim.sys.ε[:])*prod(sim.dis.dx)
+    elseif weight == :ε_bl
+        ε = ε_bl(sim; k=k)
+        Σ = sum(f[:].*ε)*prod(sim.dis.dx)
     else
-        quadrature(f, sim.dis.N, sim.dis.dx)
+        Σ = sum(f[:])*prod(sim.dis.dx)
     end
+
+    return Σ
 end
 
 
-"""
-    ∫f(z) dz = quadrature(f::Array{T,1}, N, dx)
+function ε_bl(sim::Simulation; k=1)
+    SA = absorbing_boundary_layers(sim, k)
+    S1, S2 = pml_boundary_layers(sim, k)
 
-reshapes `f` before integrating.
-"""
-function quadrature(f::AbstractArray{T,1}, N::Array{Int,1}, dx) where T
-    if ! (1 ∈ N)
-        return quadrature(reshape(f, N[1], N[2]), dx)
-    elseif N[1] == 1
-        return quadrature(f[:], dx[2])
-    else
-        return quadrature(f[:], dx[1])
-    end
-end
+    S1 = S2[1,1]*S2[2,1]
+    S1 = sparse(1:sim.dis.N[1], 1:sim.dis.N[1], 1 ./S1.nzval)
+    # S1 = (SA[1,1]*SA[2,1])^2*S1
 
+    S2 = S2[1,2]*S2[2,2]
+    S2 = sparse(1:sim.dis.N[2], 1:sim.dis.N[2], 1 ./S2.nzval)
+    # S2 = (SA[1,2]*SA[2,2])^2*S2
 
-"""
-    ∫f(z) dz = quadrature(f::Array{T,N}, dx)
-"""
-function quadrature(f::AbstractArray{T,N}, dx::AbstractArray{Float64,1}) where T where N
-    for i ∈ 1:N
-        if isodd(size(f)[i])
-            f = simpson(f,dx,i)
-        else
-            f = trapz(f,dx,i)
-        end
-    end
-    return f[1]
-end
+    S = kron(S2,S1)
+    SA = diag(kron(SA[1,2]+SA[2,2],sparse(1.0*I,sim.dis.N[1],sim.dis.N[1])) + kron(sparse(1.0*I,sim.dis.N[2],sim.dis.N[2]),SA[1,1]+SA[2,1]))
 
-
-function quadrature(f::AbstractArray{T,N}, dx::Float64) where T where N
-    return quadrature(f, fill(dx, N))
-end
-
-
-################################################################################
-## INTEGRATION METHODS
-################################################################################
-"""
-    ∫f(z) dz = trapz(f, dz, dim)
-"""
-function trapz(f::AbstractArray{T,N}, dz::Array{Float64,1}, dim=1) where T where N
-
-    full_dims = [size(f)...]
-    collapsed_dims = copy(full_dims)
-    collapsed_dims[dim] = 1
-
-    Q = zeros(T,collapsed_dims...)::Array{T,N}
-
-    for i ∈ 2:full_dims[dim]-1
-        Q[:] = Q[:] + 2selectdim(f,dim,i)[:]
-    end
-    Q[:] = Q[:] + selectdim(f,dim,1)[:]
-    Q[:] = Q[:] + selectdim(f,dim,full_dims[dim])[:]
-    return Q*dz[dim]/2
-end
-
-
-"""
-    ∫f(z) dz = simpson(f, dz, dim)
-"""
-function simpson(f::AbstractArray{T,N}, dz::Array{Float64,1}, dim=1) where T where N
-    if iseven(size(f,dim))
-        @warn "n=$(size(f,dim)) even, results not accurate."
-    end
-
-    full_dims = [size(f)...]
-    collapsed_dims = copy(full_dims)
-    collapsed_dims[dim] = 1
-
-    Q = zeros(T,collapsed_dims...)::Array{T,N}
-
-    for i ∈ 2:2:full_dims[dim]-1
-        Q[:] = Q[:] + 4selectdim(f,dim,i)[:]
-    end
-    for i ∈ 3:2:full_dims[dim]-1
-        Q[:] = Q[:] + 2selectdim(f,dim,i)[:]
-    end
-    Q[:] = Q[:] + selectdim(f,dim,1)[:]
-    Q[:] = Q[:] + selectdim(f,dim,full_dims[dim])[:]
-    return Q*dz[dim]/3
+    return (sqrt.(S*sim.sys.ε[:]) + SA).^2
 end

@@ -8,6 +8,7 @@ IterTools,
 LinearAlgebra,
 LaTeXStrings,
 NLsolve,
+Optim,
 ProgressMeter,
 Random,
 RecipesBase,
@@ -16,7 +17,7 @@ SparseArrays,
 SpecialFunctions,
 Statistics
 
-import Optim: optimize, BFGS
+# import Optim: optimize, BFGS
 # import UnicodePlots: lineplot, lineplot!, BlockCanvas
 
 # Simulation Definitions

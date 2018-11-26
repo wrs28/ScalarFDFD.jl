@@ -280,19 +280,18 @@ function pc_waveguide_domains(pc_domain; width, direction, x0=0, y0=0, waveguide
         wvg_bulk = vcat(Domain(defect_bulk; :domain_type => bulk_domain_type))
 
         defect_bnd = line_defect_domain(pc_domain, axis, -1e4, 1e4, Nt; N_width=N_width)
-        defect_bnd = Domain(defect_bnd; :is_in_domain => whole_domain)
 
         if direction ∈ [:v, :vertical, :y, :x, :horizontal, :h]
             wvg = vcat(
                     Domain(defect_bnd; :which_waveguide => waveguide_number, :which_asymptote => which_asymptote1, :domain_type => :pc_waveguide),
-                    Domain(pc_domain; :which_waveguide => waveguide_number, :which_asymptote => which_asymptote1, :domain_type => :pc_waveguide_background),
+                    Domain(pc_domain; :which_waveguide => waveguide_number, :which_asymptote => which_asymptote1, :domain_type => :pc_waveguide_background, :is_in_domain => whole_domain),
                     Domain(defect_bnd; :which_waveguide => waveguide_number+1, :which_asymptote => which_asymptote2, :domain_type => :pc_waveguide),
-                    Domain(pc_domain; :which_waveguide => waveguide_number+1, :which_asymptote => which_asymptote2, :domain_type => :pc_waveguide_background)
+                    Domain(pc_domain; :which_waveguide => waveguide_number+1, :which_asymptote => which_asymptote2, :domain_type => :pc_waveguide_background, :is_in_domain => whole_domain)
                     )
         else
             wvg = vcat(
                     Domain(defect_bnd; :which_waveguide => waveguide_number, :which_asymptote => which_asymptote, :domain_type => :pc_waveguide),
-                    Domain(pc_domain; :which_waveguide => waveguide_number, :which_asymptote => which_asymptote, :domain_type => :pc_waveguide_background)
+                    Domain(pc_domain; :which_waveguide => waveguide_number, :which_asymptote => which_asymptote, :domain_type => :pc_waveguide_background, :is_in_domain => whole_domain)
                     )
 
         end
@@ -311,7 +310,7 @@ function add_pc_waveguide(sim::Simulation; x0=0, y0=0, direction, width)
 end
 function add_pc_waveguide(sys::System; x0=0, y0=0, direction, width)
     waveguide_number = length(sys.waveguides)+1
-    temp_sys = System(sys.domains[.!ScalarFDFD.iswaveguide.([sys.domains[i] for i ∈ eachindex(sys.domains)]) .& .!ScalarFDFD.isbulkwaveguide.([sys.domains[i] for i ∈ eachindex(sys.domains)])])
+    temp_sys = System(sys.domains[.!ScalarFDFD.iswaveguide.([sys.domains[i] for i ∈ eachindex(sys.domains)]) .& .!ScalarFDFD.isbulkwaveguide.([sys.domains[i] for i ∈ eachindex(sys.domains)]) .& .!ScalarFDFD.isdefect.([sys.domains[i] for i ∈ eachindex(sys.domains)]) ])
     domain = ScalarFDFD.which_domain(x0,y0, Boundary([-Inf Inf;-Inf Inf],:d,:none,0), temp_sys)
     waveguide_domains = ScalarFDFD.pc_waveguide_domains(temp_sys.domains[domain]; x0=x0, y0=y0, direction=direction, width=width, waveguide_number=waveguide_number)
     return System(vcat(waveguide_domains,sys.domains))

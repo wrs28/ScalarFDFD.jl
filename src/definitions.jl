@@ -147,6 +147,7 @@ struct System
     domain_by_region::Array{Int,1}
 
     ε::Array{ComplexF64,2}
+    Σ::Array{Array{ComplexF64,1},2}
     F::Array{Float64,2}
 
     regions::Array{Int,2}
@@ -156,6 +157,7 @@ struct System
 
     function System(domains::Array{Domain,1},
                     ε=Array{ComplexF64}(undef, 0, 0),
+                    Σ=Array{Array{ComplexF64,1}}(undef, 0, 0),
                     F=Array{Float64}(undef, 0, 0),
                     regions=Array{Int}(undef, 0, 0))
 
@@ -202,7 +204,7 @@ struct System
         waveguides = sort(unique([domains[i].which_waveguide for i ∈ eachindex(domains)]))[2:end]
 
         return new(domains, n_by_region, ε_by_region, F_by_region,
-            domain_by_region, ε, F, regions, num_prev_regions, waveguides)
+            domain_by_region, ε, Σ, F, regions, num_prev_regions, waveguides)
     end
 end
 
@@ -457,6 +459,14 @@ struct Simulation
         bnd = Boundary(∂Ω, bnd.bc, bnd.bl, bnd.bl_depth)
         dis = Discretization(dx, dis.sub_pixel_num, origin, N, dN)
 
+        if :p ∈ bnd.bc[:,1] && isinf(lat.a)
+            @warn "periodic bc in dimension 1, but infinite lattice constant. redefining lat.a = width of domain"
+            lat.a = bnd.∂Ω[2,1]-bnd.∂Ω[1,1]
+        end
+        if :p ∈ bnd.bc[:,2] && isinf(lat.b)
+            @warn "periodic bc in dimension 2, but infinite lattice constant. redefining lat.b = height of domain"
+            lat.b = bnd.∂Ω[2,2]-bnd.∂Ω[1,2]
+        end
         for i ∈ eachindex(sys.domains)
             if N[1] == 1 && !isinf(sys.domains[i].lattice.a)
                 @warn "one-dimensional (vertical) system, but domain $(i) has finite transverse lattice constant $(sys.domains[i].lattice.a) < ∞"
@@ -467,7 +477,8 @@ struct Simulation
         end
 
         ɛ, F, regions = ScalarFDFD.sub_pixel_smoothing(bnd, dis, sys; disp_opt=disp_opt)
-        sys = System(sys.domains, ε, F, regions)
+        Σ = ScalarFDFD.σ(bnd, dis)
+        sys = System(sys.domains, ε, Σ, F, regions)
 
         for i ∈ 1:length(sct.waveguides_used)
             sct.ɛ₀[i] = Array{ComplexF64}(undef,dis.N[1],dis.N[2])

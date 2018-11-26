@@ -27,7 +27,7 @@ Note: use build_dispersions! for more control over the dispersion-building proce
 """
 function scattering(sim::Simulation, k, a;
         H=lu(sparse(complex(1.,0)*I,1,1)),
-        F=[1], file_name="", is_linear=true, ψ_init=[], ftol=2e-8, iter=150)
+        file_name="", is_linear=true, ψ_init=[], ftol=2e-8, iter=150)
 
     if length(a) < length(sim.sct.channels)
         throw(ArgumentError("number of input amplitudes $(length(a)) less than the number of input channels $(length(sim.sct.channels))"))
@@ -38,7 +38,7 @@ function scattering(sim::Simulation, k, a;
     build_dispersions!(sim)
 
     # if is_linear
-        ψ, φ₊₋, φ₊, φ₋, H = scattering_l(sim, k, a, H, F)
+        ψ, φ₊₋, φ₊, φ₋, H = scattering_l(sim, k, a, H)
     # else
         # ψ, (φ₊₋, φ₊, φ₋, H) = scattering_nl(sim, k, a, H, F, disp_opt=disp_opt, ψ_init=ψ_init, ftol=ftol, iter=iter)
     # end
@@ -57,29 +57,28 @@ function scattering(sim::Simulation, k, a;
 end
 
 
-function scattering_l(sim::Simulation, k, a, H, F)
+function scattering_l(sim::Simulation, k, a, H)
     j, φ₊₋, φ₊, φ₋ = ScalarFDFD.synthesize_source(sim, k, a)
     if (H.m == H.n == 1)
-        H = ScalarFDFD.factorize_scattering_operator(sim,k,F)
+        H = ScalarFDFD.factorize_scattering_operator(sim,k)
     end
     ψ = H\j
     return ψ, φ₊₋, φ₊, φ₋, H
 end
 
 
-function factorize_scattering_operator(sim::Simulation, k, F)
+function factorize_scattering_operator(sim::Simulation, k)
     k²= k^2
     bl_original = ScalarFDFD.set_bl!(sim, :pole)
     try
         ∇² = laplacian(sim, k)
         N = prod(sim.dis.N)
-        εt = sim.sys.ε
-        Ft = sim.sys.F
+        εt = ε_bl(sim; k=k)
 
-        ɛk² = sparse(1:N, 1:N, ɛt[:]*k², N, N)
-        χk² = sparse(1:N, 1:N, float(sim.tls.D₀)*γ(sim,k)*F.*Ft[:]*k², N, N)
+        ɛk² = sparse(1:N, 1:N, ɛt*k², N, N)
+        # χk² = sparse(1:N, 1:N, float(sim.tls.D₀)*γ(sim,k)*F.*Ft[:]*k², N, N)
 
-        return lu(∇²+ɛk²+χk²)
+        return lu(∇²+ɛk²)
     finally
         reset_bl!(sim, bl_original)
     end

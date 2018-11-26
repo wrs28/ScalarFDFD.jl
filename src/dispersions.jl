@@ -129,11 +129,11 @@ function pc_waveguide_dispersion(sim::Simulation, waveguide::Int; num_wg_bands_m
     pc_sim = Simulation(wg_sim.sys.domains[2]; bnd=Boundary(bc=:p), dis=wg_sim.dis)
 
     if wg_sim.lat.a < wg_sim.lat.b
-        ka_bloch = 0:2π/wg_sim.lat.a/(num_bloch-1):2π/wg_sim.lat.a
+        ka_bloch = -π/wg_sim.lat.a:2π/wg_sim.lat.a/(num_bloch-1):π/wg_sim.lat.a
         kb_bloch = fill(0,length(ka_bloch))
         k_bloch = ka_bloch
     else
-        kb_bloch = 0:2π/wg_sim.lat.b/(num_bloch-1):2π/wg_sim.lat.b
+        kb_bloch = -π/wg_sim.lat.b:2π/wg_sim.lat.b/(num_bloch-1):π/wg_sim.lat.b
         ka_bloch = fill(0,length(kb_bloch))
         k_bloch = kb_bloch
     end

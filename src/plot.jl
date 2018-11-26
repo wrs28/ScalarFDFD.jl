@@ -522,6 +522,7 @@ end
     levels --> 15
     lw --> 6
     seriestype --> :heatmap
+    legend --> false
 
     if by==nothing || iszero(N)
 
@@ -564,6 +565,50 @@ end
             color := cmapsim2
             clims := (-maximum(abs.(F)), maximum(abs.(F)))
             x, y, permutedims(F_sign*F)
+        end
+        for j ∈ 1:3
+            for i ∈ CartesianIndices(sim.bnd.bc)
+                if sim.bnd.bc[i] == :d
+                    linestyle := :solid
+                elseif sim.bnd.bc[i] == :n
+                    linestype := :dash
+                end
+                if i[2]==1
+                    data = ([sim.bnd.∂Ω[i], sim.bnd.∂Ω[i]], [sim.bnd.∂Ω[1,2], sim.bnd.∂Ω[2,2]])
+                else
+                    data = ([sim.bnd.∂Ω[1,1], sim.bnd.∂Ω[2,1]], [sim.bnd.∂Ω[i], sim.bnd.∂Ω[i]])
+                end
+                if sim.bnd.bl[i] !== :none
+                    if sim.bnd.bl[i] ∈ [:pml_out, :abs_out]
+                        fill_color = :red
+                    elseif sim.bnd.bl[i] ∈ [:pml_in, :abs_in]
+                        fill_color = :blue
+                    end
+                    if i[2] == 1
+                        datax = [ sim.bnd.∂Ω[i[1],1], sim.bnd.∂Ω_tr[i[1],1], sim.bnd.∂Ω_tr[i[1],1], sim.bnd.∂Ω[i[1],1], sim.bnd.∂Ω[i[1],1] ]
+                        datay = [ sim.bnd.∂Ω[1,2], sim.bnd.∂Ω[1,2],    sim.bnd.∂Ω[2,2],    sim.bnd.∂Ω[2,2], sim.bnd.∂Ω[1,2] ]
+                    else
+                        datax = [ sim.bnd.∂Ω[1,1], sim.bnd.∂Ω[1,1], sim.bnd.∂Ω[2,1], sim.bnd.∂Ω[2,1], sim.bnd.∂Ω[1,1] ]
+                        datay = [ sim.bnd.∂Ω[i[1],2], sim.bnd.∂Ω_tr[i[1],2], sim.bnd.∂Ω_tr[i[1],2], sim.bnd.∂Ω[i[1],2], sim.bnd.∂Ω[i[1],2] ]
+                    end
+                    @series begin
+                        seriestype := :path
+                        subplot := j
+                        lw := 0
+                        fill := (0,.15,fill_color)
+                        (datax, datay)
+                    end
+                end
+                if sim.bnd.bc[i] ∈ [:d, :n]
+                    @series begin
+                        seriestype := :line
+                        color := :black
+                        subplot := j
+                        lw := 2
+                        data
+                    end
+                end
+            end
         end
 
         for i ∈ 1:N

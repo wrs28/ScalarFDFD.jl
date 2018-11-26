@@ -6,18 +6,19 @@ function eig_kl(sim::Simulation, k::Number, nk::Int=1, ka=0, kb=0)
     ∇² = laplacian(sim, k; ka=ka, kb=kb)
 
     N = prod(sim.dis.N)
-    ε = ε_bl(sim; k=k)
+    ε = sim.sys.ε
 
-    ɛ⁻¹ = sparse(1:N, 1:N, 1 ./ɛ, N, N)
+    ɛ⁻¹ = sparse(1:N, 1:N, 1 ./ɛ[:], N, N)
 
     k², ψ, nconv, niter, nmult, resid = eigs(-ɛ⁻¹*∇², which = :LM, nev = nk, sigma = k^2)
+    k = sqrt.(k²)
 
     for i = 1:nk
-        𝒩² = abs(quadrature(sim, abs2.(ψ[:,i]); weight=:ε_bl, k=k))
+        𝒩² = quadrature(sim, abs2.(ψ[:,i]); weight=:ε_bl, k=k[i])
         ψ[:,i] = ψ[:,i]/sqrt(𝒩²)
     end
 
-    return sqrt.(k²)::Array{ComplexF64,1}, ψ::Array{ComplexF64,2}
+    return k::Array{ComplexF64,1}, ψ::Array{ComplexF64,2}
 end
 
 
@@ -45,7 +46,7 @@ function eig_cf(sim::Simulation, k::Number, ncf::Int, η_init, ka, kb, F)
     end
 
     for ii = 1:ncf
-        𝒩² = abs(quadrature(sim, u[inds,ii].*F_temp.*u[inds,ii]; weight=:none))
+        𝒩² = quadrature(sim, u[inds,ii].*F_temp.*u[inds,ii]; weight=:none)
         u[:,ii] = u[:,ii]/sqrt(𝒩²)
     end
 
@@ -70,11 +71,12 @@ function planar_kl(sim::Simulation, β::Number, k_init::Number, nk::Int=1)
     B² = sparse(complex(β^2,0)*I, N, N)
 
     k², ψ, nconv, niter, nmult, resid = eigs(-ɛ⁻¹*(∇²-B²), which = :LM, nev = nk, sigma = k_init^2)
+    k = sqrt.(k²)
 
     for ii = 1:nk
-        𝒩² = abs(quadrature(sim, abs2.(ψ[inds,ii])))
+        𝒩² = quadrature(sim, abs2.(ψ[inds,ii]))
         ψ[:,ii] = ψ[:,ii]/sqrt(𝒩²)
     end
 
-    return sqrt.(k²)::Array{ComplexF64,1}, ψ::Array{ComplexF64,2}
+    return k::Array{ComplexF64,1}, ψ::Array{ComplexF64,2}
 end
