@@ -1,32 +1,61 @@
 # TODO: open boundaries in laplacians_with_bc
+module DifferentialOperators
 
-function ⊗(A,B)
-    kron(A,B)
+using LinearAlgebra,
+SparseArrays
+
+export Bravais
+
+"""
+    lattice = Bravais(; a=Inf, α=0, b=Inf, β=π/2, x0=0, y0=0)
+
+bravais lattice with:
+
+- `a` is the length of the first vector (by default aligned along x-axis).
+
+- `b` is length of second vector.
+
+- `α` is the angle of first primitive vector.
+
+- `β` is the angle of second primitive vector
+
+- `x0`, `y0` define the origin of the lattice.
+"""
+struct Bravais
+    a::Float64
+    b::Float64
+    α::Float64
+    β::Float64
+    x0::Float64
+    y0::Float64
+
+    sin²θ::Float64
+    cosθ::Float64
+    R::Array{Float64,2}
+    Rᵀ::Array{Float64,2}
+    v1::Array{Float64,1}
+    v2::Array{Float64,1}
+
+    function Bravais(;a::Number=Inf, α::Number=0, b::Number=Inf, β::Number=π/2, x0::Number=0, y0::Number=0)
+        θ = β-α
+        if iszero(θ)
+            throw(ArgumentError("lattice angle θ=$(θ) cannot be zero"))
+        end
+        sinθ, cosθ = sincos(θ)
+        R = [ cos(α) -sin(α);
+              sin(α)  cos(α)]
+        Rᵀ = transpose(R)
+        v1 = R*[1,0]
+        v2 = R*[cosθ,sinθ]
+        new(float(a), float(b), float(α), float(β), float(x0), float(y0),
+            sinθ^2, cosθ, R, Rᵀ, v1, v2)
+    end
 end
+
 
 ################################################################################
 ####### GRADIENTS
 ################################################################################
-"""
-    ∇₁, ∇₂ =  grad(sim; symmetric=false)
-
-2-dim gradients with `sim.dis.N` points, lattice spacing `sim.dis.dx`.
-"""
-function grad(sim::Simulation; symmetric=false)
-    return grad(sim.dis; symmetric=symmetric)
-end
-
-
-"""
-    ∇₁, ∇₂ =  grad(dis; symmetric=false)
-
-2-dim gradients with `dis.N` points, lattice spacing `dis.dx`.
-"""
-function grad(dis::Discretization; symmetric=false)
-    return grad(dis.N, dis.dx; symmetric=symmetric)
-end
-
-
 """
     ∇ =  grad(N::Int, dx::Float64; symmetric=false)
 
@@ -36,7 +65,7 @@ lattice spacing `dx`.
 `symmetric=true`: 1-dim symmetric Gradient (depending on interpretation of ∇ψ) with `N` points,
 lattice spacing `dx`.
 """
-function grad(N::Int, dx; symmetric=false)
+function grad(N::Int, dx; symmetric::Bool=false)
     if symmetric
         I₁ = Array(2:N)
         J₁ = Array(1:N-1)
@@ -68,7 +97,7 @@ end
 
 2-dim gradients with `N[1]`, `N[2]` points, lattice spacing `dx[1], dx[2]`.
 """
-function grad(N::Array{Int}, dx; symmetric=false)
+function grad(N::Array{Int}, dx; symmetric::Bool=false)
     ∇1 = grad(N[1],dx[1]; symmetric=symmetric)
     ∇2 = grad(N[2],dx[2]; symmetric=symmetric)
 
@@ -88,10 +117,10 @@ end
 """
     ∇² = laplacian(sim, k; ka=0, kb=0)
 """
-function laplacian(sim::Simulation, k; ka=0, kb=0)
+function laplacian(N::Array{Int}, dx::Array{Float64}, k::Number, lattice::Bravais; ka::Number=0, kb::Number=0)
 
-    ∇₁², ∇₂² = ScalarFDFD.laplacians_sans_bc(sim, k)
-    ScalarFDFD.laplacians_with_bc!(∇₁², ∇₂², sim)
+    ∇₁², ∇₂² = laplacians_sans_bc(sim, k)
+    laplacians_with_bc!(∇₁², ∇₂², sim)
 
     I1 = sim.bnd.indices[1]
     J1 = sim.bnd.indices[2]
@@ -109,15 +138,15 @@ function laplacian(sim::Simulation, k; ka=0, kb=0)
     𝕀1 = sparse(complex(1.,0)I, sim.dis.N[1], sim.dis.N[1])
     𝕀2 = sparse(complex(1.,0)I, sim.dis.N[2], sim.dis.N[2])
 
-    if !isinf(sim.lat.a) && !isinf(sim.lat.b)
-        ϕ1 = -N1a*ka*sim.lat.a - N1b*kb*sim.lat.b
-        ϕ2 = -N2a*ka*sim.lat.a - N2b*kb*sim.lat.b
-    elseif !isinf(sim.lat.b)
-        ϕ1 = -N1b*kb*sim.lat.b
-        ϕ2 = -N2b*kb*sim.lat.b
-    elseif !isinf(sim.lat.a)
-        ϕ1 = -N1a*ka*sim.lat.a
-        ϕ2 = -N2a*ka*sim.lat.a
+    if !isinf(lattice.a) && !isinf(lattice.b)
+        ϕ1 = -N1a*ka*lattice.a - N1b*kb*lattice.b
+        ϕ2 = -N2a*ka*lattice.a - N2b*kb*lattice.b
+    elseif !isinf(lattice.b)
+        ϕ1 = -N1b*kb*lattice.b
+        ϕ2 = -N2b*kb*lattice.b
+    elseif !isinf(lattice.a)
+        ϕ1 = -N1a*ka*lattice.a
+        ϕ2 = -N2a*ka*lattice.a
     else
         ϕ1 = 0
         ϕ2 = 0
@@ -133,9 +162,7 @@ end
 """
     ∇₁², ∇₂² = laplacians_sans_bc(sim, k)
 """
-function laplacians_sans_bc(sim::Simulation, k)
-    N = sim.dis.N
-    dx = sim.dis.dx
+function laplacians_sans_bc(N::Array{Int},dx::Array{Float64}, k::Number)
 
     S1, S2 = pml_boundary_layers(sim, k)
 
@@ -266,58 +293,40 @@ end
 """
     I, J, V = periodic_boundary_weights(sim, dim)
 """
-function periodic_boundary_weights(sim::Simulation, dim::Int)
-    if !(iszero(sim.lat.α) || iszero(sim.lat.β-π/2))
+function periodic_boundary_weights(N::Array{Int}, lattice::Bravais, dim::Int)
+    if !(iszero(lattice.α) || iszero(lattice.β-π/2))
         throw(ArgumentError("this scheme does not work for angled periodic lattices.
-    This lattice has α=$(sim.lat.α) and β=$(sim.lat.β)"))
+    This lattice has α=$(lattice.α) and β=$(lattice.β)"))
     end
 
-    sim = deepcopy(sim)
-    lattice = Bravais(sim.lat; :x0=>0, :y0=>0)
-    ∂Ω = sim.bnd.∂Ω
-    ∂Ω_tr = sim.bnd.∂Ω_tr
-    bc = sim.bnd.bc
-    bl = sim.bnd.bl
-    bl_depth = sim.bnd.bl_depth
-
-    a = lattice.a
-    b = lattice.b
-    α = lattice.α
-    β = lattice.β
-
-    N = sim.dis.N
+    a, b, α, β = lattice.a, lattice.b, lattice.α, lattice.β
 
     if dim == 1
-        if !isinf(a)
-            ∂Ω[1,1] = min(0, a*(cos(α)-sin(α)*cot(β)))
-            ∂Ω[2,1] = max(0, a*(cos(α)-sin(α)*cot(β)))
-        else
+        if isinf(a)
             return Array{Int}(undef,0), Array{Int}(undef,0), Array{Float64}(undef,0), Array{Int}(undef,0), Array{Int}(undef,0)
+        else
+            startx = lattice.x0 + min(0, a*(cos(α)-sin(α)*cot(β)))
+            stopx = lattice.x0 + max(0, a*(cos(α)-sin(α)*cot(β)))
         end
-        ∂Ω[2,2] = ∂Ω[2,2]-∂Ω[1,2]
-        ∂Ω[1,2] = 0
     elseif dim == 2
-        ∂Ω[2,1] = ∂Ω[2,1]-∂Ω[1,1]
-        ∂Ω[1,1] = 0
-        if !isinf(b)
-            ∂Ω[1,2] = min(0, b*sin(β))
-            ∂Ω[2,2] = max(0, b*sin(β))
-        else
+        if isinf(b)
             return Array{Int}(undef,0), Array{Int}(undef,0), Array{Float64}(undef,0), Array{Int}(undef,0), Array{Int}(undef,0)
+        else
+            start = lattice.y0 + min(0, b*sin(β))
+            stop = lattice.y0 + max(0, b*sin(β))
         end
     else
         throw(ArgumentError("invalid dimensions $(dim)"))
     end
 
-    bnd = Boundary(∂Ω, bc, bl, bl_depth)
-    sim = Simulation(sim; :bnd => bnd, :lat => lattice )
-    x = sim.dis.x[1]; y = sim.dis.x[2]; dx = sim.dis.dx[1]; dy = sim.dis.dx[2]
-    lattice = sim.lat; N = sim.dis.N
+    dx, dy = lattice.a/N[1], lattice.b/N[2]
 
+    x = LinRange(start + dx/2, stop - dx/2, N[1])
+    y = LinRange(start + dy/2, stop - dy/2, N[2])
     if dim == 1
-        P = ScalarFDFD.bravais_coordinates.(x[1]-dx, y, Ref(lattice))
+        P = bravais_coordinates.(x[1]-dx, y, Ref(lattice))
     else
-        P = ScalarFDFD.bravais_coordinates.(x, y[1]-dy, Ref(lattice))
+        P = bravais_coordinates.(x, y[1]-dy, Ref(lattice))
     end
 
     p1 = Array{Float64}(undef, N[mod1(dim+1,2)])
@@ -326,17 +335,17 @@ function periodic_boundary_weights(sim::Simulation, dim::Int)
         p1[i] = P[i][1]
         p2[i] = P[i][2]
     end
-    Ma = -floor.(Int, p1/sim.lat.a)
-    Mb = -floor.(Int, p2/sim.lat.b)
-    if isinf(sim.lat.a) && !isinf(sim.lat.b)
-        X = sim.lat.v1[1]*p1 + sim.lat.v2[1]*(p2 + Mb*sim.lat.b)
-        Y = sim.lat.v1[2]*p1 + sim.lat.v2[2]*(p2 + Mb*sim.lat.b)
-    elseif isinf(sim.lat.b) && !isinf(sim.lat.a)
-        X = sim.lat.v1[1]*(p1 + Ma*sim.lat.a) + sim.lat.v2[1]*p2
-        Y = sim.lat.v1[2]*(p1 + Ma*sim.lat.a) + sim.lat.v2[2]*p2
+    Ma = -floor.(Int, p1/lattice.a)
+    Mb = -floor.(Int, p2/lattice.b)
+    if isinf(lattice.a) && !isinf(lattice.b)
+        X = lattice.v1[1]*p1 + lattice.v2[1]*(p2 + Mb*lattice.b)
+        Y = lattice.v1[2]*p1 + lattice.v2[2]*(p2 + Mb*lattice.b)
+    elseif isinf(lattice.b) && !isinf(lattice.a)
+        X = lattice.v1[1]*(p1 + Ma*lattice.a) + lattice.v2[1]*p2
+        Y = lattice.v1[2]*(p1 + Ma*lattice.a) + lattice.v2[2]*p2
     else
-        X = sim.lat.v1[1]*(p1 + Ma*sim.lat.a) + sim.lat.v2[1]*(p2 + Mb*sim.lat.b)
-        Y = sim.lat.v1[2]*(p1 + Ma*sim.lat.a) + sim.lat.v2[2]*(p2 + Mb*sim.lat.b)
+        X = lattice.v1[1]*(p1 + Ma*lattice.a) + lattice.v2[1]*(p2 + Mb*lattice.b)
+        Y = lattice.v1[2]*(p1 + Ma*lattice.a) + lattice.v2[2]*(p2 + Mb*lattice.b)
     end
 
     Ma += -floor.(Int, X/(sim.bnd.∂Ω[2,1]-sim.bnd.∂Ω[1,1]))
@@ -428,70 +437,11 @@ end
 
 
 """
-    boundary_layers(sim)
+    ⊗(A,B) = kron(A,B)
 """
-function pml_boundary_layers(sim::Simulation, k)
-
-    Σ = sim.sys.Σ
-    N = sim.dis.N
-
-    S1 = [sparse(1:N[j]-1, 1:N[j]-1, Vector{ComplexF64}(undef,N[j]-1), N[j]-1, N[j]-1) for i ∈ 1:2, j ∈ 1:2]
-    S2 = [sparse(1:N[j], 1:N[j], Vector{ComplexF64}(undef,N[j]), N[j], N[j]) for i ∈ 1:2, j ∈ 1:2]
-    for r ∈ CartesianIndices(S1)
-        j = r[2]
-        if sim.bnd.bl[r] ∈ [:pml_out, :pml_in]
-            S1[r] = sparse(1:N[j]-1, 1:N[j]-1, 1 ./(1 .+ 1im*(Σ[r][1:end-1] + Σ[r][2:end])/real(2k)), N[j]-1, N[j]-1)
-            S2[r] = sparse(1:N[j], 1:N[j], 1 ./(1 .+ 1im*Σ[r]/real(k)), N[j], N[j])
-        else
-            S1[r] = sparse(complex(1.,0)I, N[j]-1, N[j]-1)
-            S2[r] = sparse(complex(1.,0)I, N[j], N[j])
-        end
-    end
-
-    return S1, S2
+function ⊗(A,B)
+    kron(A,B)
 end
 
 
-"""
-    s₁, s₂ = σ(bnd, dis)
-
-conductivity for absorbing layer (PML or not) in dimensions 1 and 2.
-"""
-function σ(bnd::Boundary, dis::Discretization)
-
-    α = Array{ComplexF64}(undef,2,2)
-    for i ∈ CartesianIndices(α)
-        if bnd.bl[i] !== :none
-            β = 2*sqrt(bnd.bl_depth[i])
-            # α[i] = -(1/4)*(POWER_LAW+1)*exp(complex(0,SCALING_ANGLE))*log(EXTINCTION)/(bnd.bl_depth[i]^(float(POWER_LAW)+1))
-            α[i] = -(1/4)*exp(complex(0,SCALING_ANGLE))*log(EXTINCTION)/bnd.bl_depth[i]/((2exp(β)-β)/(2β*(exp(β)-1))-1/β^2)
-        else
-            α[i] = 0
-        end
-        if bnd.bl[i] ∈ [:abs_in, :pml_in]
-            α[i] = flipsign(conj(α[i]),-1)
-        end
-    end
-
-    Σ = Array{Array{ComplexF64,1},2}(undef,2,2)
-    for r ∈ CartesianIndices(Σ)
-        i = r[1]
-        j = r[2]
-        Σ[i,j] = zeros(ComplexF64,length(dis.x[j]))
-        if bnd.bl[r] !== :none
-            for k ∈ eachindex(dis.x[j])
-                if sign(bnd.∂Ω_tr[i,j] - dis.x[j][k])*(-1)^i ≤ 0
-                     # Σ[i,j][k] = α[i,j]*(abs(dis.x[j][k]-bnd.∂Ω_tr[i,j]))^POWER_LAW
-                     u = abs(dis.x[j][k]-bnd.∂Ω_tr[i,j])/bnd.bl_depth[i,j]
-                     β = 2*sqrt(bnd.bl_depth[i,j])
-                     Σ[i,j][k] = α[i,j]*u*(exp(β*u)-1)/(exp(β)-1)
-                end
-            end
-        end
-    end
-
-    return Σ
-end
-function σ(sim::Simulation)
-    return σ(sim.bnd, sim.dis)
-end
+end # module
