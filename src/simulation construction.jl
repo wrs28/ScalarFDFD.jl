@@ -1,33 +1,33 @@
 #    TODO: sub_pixel_smoothing in 2-dim case, take care of smoothing along edges
 #    TODO: fix Bravais in 1-dimension
-    #TODO: build_channels! higher order band gaps
+#TODO: build_channels! higher order band gaps
 ################################################################################
 ###############   SUB PIXEL SMOOTHING    #######################################
 ################################################################################
+
 """
-    ε, F, regions = sub_pixel_smoothing(bnd, dis, sys)
+    ε, regions = sub_pixel_smoothing(bnd, dis, sys; disp_opt=false)
 """
 function sub_pixel_smoothing(bnd::Boundary, dis::Discretization, sys::System; disp_opt=false)
 
     x = dis.x[1]
     y = dis.x[2]
 
-    domains = ScalarFDFD.which_domain.(x, y, Ref(bnd), Ref(sys))
-    xy = ScalarFDFD.bravais_coordinates_unit_cell.(x, y, domains, Ref(sys))
+    domains = which_domain.(x, y, Ref(bnd), Ref(sys))
+    xy = bravais_coordinates_unit_cell.(x, y, domains, Ref(sys))
     xb = Array{Float64}(undef,size(xy))
     yb = Array{Float64}(undef,size(xy))
     for i ∈ eachindex(xb)
         xb[i] = xy[i][1]
         yb[i] = xy[i][2]
     end
-    regions = ScalarFDFD.which_region.(xb, yb, domains, Ref(sys))
+    regions = which_region.(xb, yb, domains, Ref(sys))
     r = regions
 
-    ε_by_region = sys.ε_by_region
-    F_by_region = sys.F_by_region
-
-    ɛ = ɛ_by_region[regions]
-    F = F_by_region[regions]
+    ε = Array{ComplexF64}(undef,dis.N[1],dis.N[2])
+    for i ∈ CartesianIndices(regions)
+        ε[i] = sys.ε_by_region[regions[i]](x[i[1]],y[i[2]],sys.params_by_region[regions[i]])
+    end
 
     sub_pixel_num = dis.sub_pixel_num
     if length(y) == 1
@@ -38,7 +38,6 @@ function sub_pixel_smoothing(bnd::Boundary, dis::Discretization, sys::System; di
         yb = Array{Float64}(undef, sub_pixel_num, 1)
         sub_regions = Array{Int}(undef, sub_pixel_num, 1)
         sub_domains = Array{Int}(undef, sub_pixel_num, 1)
-        # pg = Progress((length(x)-2), PROGRESS_UPDATE_TIME::Float64, "sub-pixel smoothing ")
         for i in 2:(length(x)-1)
             nearestNeighborFlag = r[i]!==r[i+1] || r[i]!==r[i-1]
             if nearestNeighborFlag
@@ -53,9 +52,7 @@ function sub_pixel_smoothing(bnd::Boundary, dis::Discretization, sys::System; di
                 end
                 sub_regions[:] = which_region.(xb, yb, sub_domains, Ref(sys))
                 ɛ[i] = mean(ɛ_by_region[sub_regions])
-                F[i] = mean(F_by_region[sub_regions])
             end
-            # next!(pg)
         end
     elseif length(x) == 1
         sub_x = x
@@ -65,7 +62,6 @@ function sub_pixel_smoothing(bnd::Boundary, dis::Discretization, sys::System; di
         yb = Array{Float64}(undef, 1, sub_pixel_num)
         sub_regions = Array{Int}(undef, 1, sub_pixel_num)
         sub_domains = Array{Int}(undef, 1, sub_pixel_num)
-        # pg = Progress((length(y)-2), PROGRESS_UPDATE_TIME::Float64, "sub-pixel smoothing ")
         for i in 2:(length(y)-1)
             nearestNeighborFlag = r[i]!==r[i+1] || r[i]!==r[i-1]
             if nearestNeighborFlag
@@ -82,12 +78,8 @@ function sub_pixel_smoothing(bnd::Boundary, dis::Discretization, sys::System; di
                 ɛ[i] = mean(ɛ_by_region[sub_regions])
                 F[i] = mean(F_by_region[sub_regions])
             end
-            # next!(pg)
         end
     else
-        # rng = MersenneTwister(0)
-        # Rx = rand(rng,sub_pixel_num)
-        # Ry = rand(rng,sub_pixel_num)
         sub_x = Array{Float64}(undef, sub_pixel_num, 1)
         sub_y = Array{Float64}(undef, 1, sub_pixel_num)
         xy = Array{Tuple{Float64,Float64}}(undef, sub_pixel_num, sub_pixel_num)
@@ -95,6 +87,7 @@ function sub_pixel_smoothing(bnd::Boundary, dis::Discretization, sys::System; di
         yb = Array{Float64}(undef, sub_pixel_num, sub_pixel_num)
         sub_regions = Array{Int}(undef, sub_pixel_num, sub_pixel_num)
         sub_domains = Array{Int}(undef, sub_pixel_num, sub_pixel_num)
+        ε_temp = Array{ComplexF64}(undef,sub_pixel_num, sub_pixel_num)
         if disp_opt
             pg = Progress((length(x)-2)*(length(y)-2), PROGRESS_UPDATE_TIME::Float64, "sub-pixel smoothing ")
         end
@@ -106,19 +99,19 @@ function sub_pixel_smoothing(bnd::Boundary, dis::Discretization, sys::System; di
                 y_min = (y[j]+y[j-1])/2
                 x_max = (x[i]+x[i+1])/2
                 y_max = (y[j]+y[j+1])/2
-                # Rx = rand(rng,sub_pixel_num)
-                # Ry = rand(rng,sub_pixel_num)
-                sub_x[:] = LinRange(x_min, x_max, sub_pixel_num) #x_min .+ (x_max-x_min)*Rx
-                sub_y[:] = LinRange(y_min, y_max, sub_pixel_num) #y_min .+ (y_max-y_min)*Ry
-                sub_domains[:] = ScalarFDFD.which_domain.(sub_x, sub_y, Ref(bnd), Ref(sys))
-                xy[:] = ScalarFDFD.bravais_coordinates_unit_cell.(sub_x, sub_y, sub_domains, Ref(sys))
+                sub_x[:] = LinRange(x_min, x_max, sub_pixel_num)
+                sub_y[:] = LinRange(y_min, y_max, sub_pixel_num)
+                sub_domains[:] = which_domain.(sub_x, sub_y, Ref(bnd), Ref(sys))
+                xy[:] = bravais_coordinates_unit_cell.(sub_x, sub_y, sub_domains, Ref(sys))
                 for k ∈ eachindex(xb)
                     xb[k] = xy[k][1]
                     yb[k] = xy[k][2]
                 end
-                sub_regions[:] = ScalarFDFD.which_region.(xb, yb, sub_domains, Ref(sys))
-                ɛ[i,j] = mean(ɛ_by_region[sub_regions])
-                F[i,j] = mean(F_by_region[sub_regions])
+                sub_regions[:] = which_region.(xb, yb, sub_domains, Ref(sys))
+                for i ∈ CartesianIndices(sub_regions)
+                    ε_temp[i] = sys.ε_by_region[regions[i]](x[i[1]],y[i[2]],sys.params_by_region[regions[i]])
+                end
+                ε[i,j] = mean(ε_temp)
             end
             if disp_opt
                 next!(pg)
@@ -126,7 +119,7 @@ function sub_pixel_smoothing(bnd::Boundary, dis::Discretization, sys::System; di
         end
     end
 
-    return ɛ, F, regions
+    return ɛ, regions
 end
 
 
@@ -158,7 +151,7 @@ end
 """
 function which_region(x, y, domain, sys::System)
     i = 1
-    while i≤length(sys.domains[domain].is_in_region) && !sys.domains[domain].is_in_region[i](x, y, i, sys.domains[domain])
+    while i≤length(sys.domains[domain].is_in_subdomain) && !sys.domains[domain].is_in_subdomain[i](x, y, i, sys.domains[domain])
         i += 1
     end
     region = sys.num_prev_regions[domain] + i
@@ -277,6 +270,59 @@ end
 """
     whole_domain(x, y, domain_index, bnd, sys)
 """
-function whole_domain(x,y,idx,bnd::Boundary,sys::System)
+function whole_domain(x,y,idx,bnd::Boundary,sys::System)::Bool
     return true
+end
+
+
+
+"""
+    piecewise_constant_ε(x,y,params)
+"""
+function piecewise_constant_ε(x,y,params)
+    return complex(params[:n₁],params[:n₂])^2
+end
+
+
+"""
+    Σ::ComplexF64 = σ(x, y, bnd, side::Symbol)
+    Σ::Array{ComplexF64,2} = σ(dis, bnd)
+    Σ::Array{ComplexF64,2} = σ(sim)
+
+conductivity for absorbing layer (PML or not)
+"""
+function σ(x::Real,y::Real,bnd::Boundary,side::Symbol)
+
+    α = bnd.α
+    if side == :left
+        i = 1; j = 1
+    elseif side == :right x > bnd.∂Ω_tr[2,1]
+        i = 2; j = 1
+    elseif side == :bottom
+        i = 1; j = 2
+    elseif side == :top
+        i = 2; j = 2
+    else
+        throw(ArgumentError("invalid side $side, must be one of :left, :right, :bottom, :top"))
+    end
+    pos = (x,y)
+    if sign(bnd.∂Ω_tr[i,j] - pos[j])*(-1)^i ≤ 0
+         u = abs(pos[j]-bnd.∂Ω_tr[i,j])/bnd.bl_depth[i,j]
+         β = 2*sqrt(bnd.bl_depth[i,j])
+         Σ = α[i,j]*u*(exp(β*u)-1)/(exp(β)-1)
+     else
+         Σ = complex(0.)
+    end
+    return Σ
+end
+function σ(dis::Discretization, bnd::Boundary)
+    Σ = zeros(ComplexF64,dis.N[1],dis.N[2])
+    Σ += σ.(dis.x[1], dis.x[2], Ref(bnd), :left)
+    Σ += σ.(dis.x[1], dis.x[2], Ref(bnd), :right)
+    Σ += σ.(dis.x[1], dis.x[2], Ref(bnd), :bottom)
+    Σ += σ.(dis.x[1], dis.x[2], Ref(bnd), :top)
+    return Σ
+end
+function σ(sim::Simulation)
+    return σ(sim.dis, sim.bnd)
 end
