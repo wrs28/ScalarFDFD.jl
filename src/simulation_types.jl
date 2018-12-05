@@ -4,9 +4,9 @@
 
 """
     domain = Domain(; is_in_domain = whole_domain,
-        domain_params::Dict{Symbol, Float64} = Dict(:n₁ => 1.0, :n₂ => 0.0, :F => 0.0),
+        domain_params = Dict(:n₁ => 1, :n₂ => 0, :F => 0),
         domain_type = :background,
-        domain_ε::Functi = piecewise_constant_ε,
+        domain_ε::Function = piecewise_constant_ε,
         is_in_subdomain = Function[],
         subdomain_params = Dict{Symbol,Float64}[],
         subdomain_type = Symbol[],
@@ -21,32 +21,32 @@ INCOMPLETE DOCUMENTATION
 """
 struct Domain
     is_in_domain::Function
-    domain_params::Dict{Symbol, Float64}
+    domain_params::Dict{Symbol,T} where T<:Number
     domain_type::Symbol
     domain_ε::Function
 
     is_in_subdomain::Array{Function,1}
-    subdomain_params::Array{Dict{Symbol, Float64},1}
+    subdomain_params::Array{Dict{Symbol,U},1} where U<:Number
     subdomain_type::Array{Symbol,1}
     subdomain_ε::Array{Function,1}
 
-    lattice::Bravais
+    lattice::BravaisLattice
     which_asymptote::Symbol
     which_waveguide::Int
 
     num_subdomains::Int
 
     function Domain(; is_in_domain::Function = whole_domain,
-        domain_params::Dict{Symbol, Float64} = Dict(:n₁ => 1.0, :n₂ => 0.0, :F => 0.0),
+        domain_params::Dict{Symbol,V} = Dict(:n₁ => 1, :n₂ => 0, :F => 0),
         domain_type::Symbol = :background,
         domain_ε::Function = piecewise_constant_ε,
         is_in_subdomain::Array{Function,1} = Function[],
-        subdomain_params::Array{Dict{Symbol,Float64}, 1} = Dict{Symbol,Float64}[],
+        subdomain_params::Array{Dict{Symbol,W},1} = Dict{Symbol,Float64}[],
         subdomain_type::Array{Symbol,1} = Symbol[],
         subdomain_ε::Array{Function} = Function[],
-        lattice::Bravais = Bravais(),
+        lattice::BravaisLattice = BravaisLattice(),
         which_asymptote::Symbol = :none,
-        which_waveguide::Int = 0)
+        which_waveguide::Int = 0) where V<:Number where W<:Number
 
         num_subdomains= 1 + length(is_in_subdomain)
 
@@ -75,7 +75,7 @@ struct System
     Σ::Array{ComplexF64,2}
 
     domain_by_region::Array{Int,1}
-    params_by_region::Array{Dict{Symbol,Float64},1}
+    params_by_region::Array{Dict{Symbol,T},1} where T<:Number
     ε_by_region::Array{Function,1}
 
     regions::Array{Int,2}
@@ -92,11 +92,11 @@ struct System
         domains = deepcopy(domains)
 
         # order domains
-        sort!(domains, by=isbulkwaveguide, rev=false)
-        sort!(domains, by=isbackground, rev=false)
-        sort!(domains, by=isdefect, rev=true)
-        sort!(domains, by=ispc, rev=false)
-        sort!(domains, by=iswaveguide, rev=true)
+        sort!(domains, by=isBulkWaveguide, rev=false)
+        sort!(domains, by=isBackground, rev=false)
+        sort!(domains, by=isDefect, rev=true)
+        sort!(domains, by=isPC, rev=false)
+        sort!(domains, by=isWaveguide, rev=true)
 
         num_regions = 0
         for d ∈ domains
@@ -138,6 +138,7 @@ end
 
 struct Discretization
     dx::Array{Float64,1}
+    coordinate_system::Symbol
     sub_pixel_num::Int
     origin::Array{Float64,1}
 
@@ -149,9 +150,12 @@ struct Discretization
     x_tr::Array{Array{Float64,2},1}
     x_idx::Array{Array{Int,1},1}
 
+    X::Array{Float64,2}
+    Y::Array{Float64,2}
+
     X_idx::Array{Int,1}
 
-    function Discretization(dx, sub_pixel_num, origin, N, dN)
+    function Discretization(dx, coordinate_system, sub_pixel_num, origin, N, dN)
 
         dx = deepcopy(dx)
         sub_pixel_num=deepcopy(sub_pixel_num)
@@ -179,10 +183,20 @@ struct Discretization
             end
         end
 
+        if isCartesian(coordinate_system)
+            X =   x[1] .+ 0*x[2]
+            Y = 0*x[1] .+   x[2]
+        elseif isPolar(coordinate_system)
+            X = x[1].*cos.(x[2])
+            Y = x[1].*sin.(x[2])
+        else
+            throw(ArgumentError("unrecognized coordinate system $coordinate_system"))
+        end
+
         X_idx = LinearIndices(Array{Bool}(undef, N...))[x_idx...][:]
 
-        return new(float.(dx), sub_pixel_num, float.(origin), N_tr, N, dN,
-            x, x_tr, x_idx, X_idx)
+        return new(float.(dx), coordinate_system, sub_pixel_num, float.(origin), N_tr, N, dN,
+            x, x_tr, x_idx, X, Y, X_idx)
     end
 end
 
@@ -192,18 +206,26 @@ struct Boundary
     ∂Ω_tr::Array{Float64,2}
 
     bc::Array{Symbol,2}
+    BC::Tuple{T,U} where T<:Union{Nothing,BoundaryCondition} where U<:Union{Nothing,BoundaryCondition}
 
     bl::Array{Symbol,2}
     bl_depth::Array{Float64,2}
 
     α::Array{ComplexF64,2}
 
-    indices::Array{Array{Int},1}
-    weights::Array{Array{Float64},1}
-    shifts::Array{Array{Int},1}
-
+    function Boundary(∂Ω::Array{S,2}, bc::Array{Symbol,2}, BC::Tuple{Q,L}, bl::Array{Symbol,2},
+                bl_depth::Array{V,2}) where Q<:BoundaryCondition where L<:BoundaryCondition where S<:Real where V<:Real
+        ∂Ω, ∂Ω_tr, bc, bl, bl_depth, α = BoundaryCore(∂Ω, bc, bl, bl_depth)
+        return new(∂Ω, ∂Ω_tr, bc, BC, bl, bl_depth, α)
+    end
     function Boundary(∂Ω::Array{S,2}, bc::Array{Symbol,2}, bl::Array{Symbol,2},
-        bl_depth::Array{T,2}) where S<:Real where T<:Real
+                bl_depth::Array{V,2}) where Q<:BoundaryCondition where L<:BoundaryCondition where S<:Real where V<:Real
+        BC = (nothing, nothing)
+        ∂Ω, ∂Ω_tr, bc, bl, bl_depth, α = BoundaryCore(∂Ω, bc, bl, bl_depth)
+        return new(∂Ω, ∂Ω_tr, bc, BC, bl, bl_depth, α)
+    end
+    function BoundaryCore(∂Ω::Array{S,2}, bc::Array{Symbol,2}, bl::Array{Symbol,2},
+        bl_depth::Array{V,2}) where Q<:BoundaryCondition where L<:BoundaryCondition where S<:Real where V<:Real
 
         ∂Ω = deepcopy(∂Ω)
         bc = deepcopy(bc)
@@ -250,10 +272,7 @@ struct Boundary
             end
         end
 
-        indices = Array{Array{Int}}(undef, 4)
-        weights = Array{Array{Float64}}(undef, 2)
-        shifts = Array{Array{Int}}(undef, 4)
-        return new(float.(∂Ω), float.(∂Ω_tr), bc, bl, float.(bl_depth), α, indices, weights, shifts)
+        return float.(∂Ω), float.(∂Ω_tr), bc, bl, float.(bl_depth), α
     end
 end
 
@@ -344,14 +363,14 @@ struct Simulation
     dis::Discretization
     sct::Scattering
     tls::TwoLevelSystem
-    lat::Bravais
+    lat::BravaisLattice
 
     function Simulation(;sys::System=System(),
         bnd::Boundary,
         dis::Discretization,
         sct::Scattering=Scattering(),
         tls::TwoLevelSystem=TwoLevelSystem(),
-        lat::Bravais=Bravais(bnd),
+        lat::BravaisLattice=BravaisLattice(bnd),
         disp_opt=false)
 
         # shield structures from downstream changes
@@ -396,8 +415,8 @@ struct Simulation
 
         origin = bnd.∂Ω[1,:]
 
-        bnd = Boundary(∂Ω, bnd.bc, bnd.bl, bnd.bl_depth)
-        dis = Discretization(dx, dis.sub_pixel_num, origin, N, dN)
+        bnd = Boundary(∂Ω, bnd.bc, ezbc([bnd.bc[1,1],bnd.bc[2,1]],[bnd.bc[1,2],bnd.bc[2,2]],N), bnd.bl, bnd.bl_depth)
+        dis = Discretization(dx, dis.coordinate_system, dis.sub_pixel_num, origin, N, dN)
 
         # argument checking
         if :p ∈ bnd.bc[:,1] && isinf(lat.a)

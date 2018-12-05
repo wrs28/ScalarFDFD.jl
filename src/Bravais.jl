@@ -7,7 +7,7 @@ bravais_coordinates_unit_cell,
 bravais_coordinates
 
 """
-    lattice = Bravais(; a=Inf, α=0, b=Inf, β=π/2, x0=0, y0=0)
+    lattice = BravaisLattice(; a=Inf, α=0, b=Inf, β=π/2, x0=0, y0=0)
 
 bravais lattice with:
 
@@ -50,7 +50,7 @@ struct BravaisLattice
         new(float(a), float(b), float(α), float(β), float(x0), float(y0),
             sinθ^2, cosθ, R, Rᵀ, v1, v2)
     end
-end
+end # end of struct BravaisLatice
 
 
 """

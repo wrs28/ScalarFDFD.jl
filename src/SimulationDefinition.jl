@@ -1,23 +1,27 @@
 module SimulationDefinition
 
-using Interpolations
+using Bravais,
+DifferentialOperators,
+Interpolations,
+RecipesBase
 
-export Bravais,
-    Domain,
-    System,
-    Discretization,
-    Boundary,
-    Channels,
-    Scattering,
-    TwoLevelSystem,
-    Simulation
 
-    include("defaults.jl")
-    include("simulation structures.jl")
-    include("simulation construction.jl")
-    include("simulation overloading.jl")
-    include("bravais coordinates.jl")
+export Domain,
+System,
+Discretization,
+Boundary,
+Channels,
+Scattering,
+TwoLevelSystem,
+Simulation
 
-    include("iss.jl")
+include("defaults.jl")
+include("simulation_types.jl")
+include("simulation_construction.jl")
+
+include("simulation_overloading.jl")
+include("bravais_overloading.jl")
+
+include("iss.jl")
 
 end # module

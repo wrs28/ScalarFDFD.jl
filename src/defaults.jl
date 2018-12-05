@@ -190,14 +190,3 @@ function fix_colormap(theme)
 
     return cmapc, cmapk, cmapsim1, cmapsim2, n_mult, F_sign
 end
-
-
-"""
-
-"""
-function remove_boundary_weights!(sim::Simulation)
-    for i ∈ 1:4
-        pop!(sim.bnd.weights)
-    end
-    return nothing
-end

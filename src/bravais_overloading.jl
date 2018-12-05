@@ -1,10 +1,9 @@
-
 """
-    lattice = Bravais(bnd::Boundary)
+    lattice = BravaisLattice(bnd::Boundary)
 
 Rectangular lattice with same size as defined in `bnd` along periodic directions.
 """
-function Bravais(bnd::Boundary)
+function Bravais.BravaisLattice(bnd::Boundary)
     if :p ∈ bnd.bc[:,1] && bnd.bc[1,1] == bnd.bc[2,1]
         a = bnd.∂Ω[2,1]-bnd.∂Ω[1,1]
     elseif :p ∈ bnd.bc[:,1] && bnd.bc[1,1] !== bnd.bc[2,1]
@@ -19,17 +18,17 @@ function Bravais(bnd::Boundary)
     else
         b = Inf
     end
-    return Bravais(a=a, b=b)
+    return BravaisLattice(a=a, b=b)
 end
 
 
 """
-    lattice = Bravais(sim::Simulation)
+    lattice = BravaisLattice(sim::Simulation)
 
 Rectangular lattice with same size as defined in `sim.bnd` along periodic directions.
 """
-function Bravais(sim::Simulation)
-    return Bravais(sim.bnd)
+function Bravais.BravaisLattice(sim::Simulation)
+    return BravaisLattice(sim.bnd)
 end
 
 
@@ -39,25 +38,29 @@ end
 maps cartesian (`x`,`y`) into cartesian (`xb`,`yb`) unit cell specified by
 sys.domains[domain_index].lattice
 """
-function bravais_coordinates_unit_cell(x, y, domain::Int, system::System)
+function Bravais.bravais_coordinates_unit_cell(x, y, domain::Int, system::System)
     return bravais_coordinates_unit_cell(x, y, system.domains[domain])
 end
+
+
 """
     xb, yb = bravais_coordinates_unit_cell(x, y, domain)
 
 maps cartesian (`x`,`y`) into cartesian (`xb`,`yb`) unit cell specified by
 domain.lattice
 """
-function bravais_coordinates_unit_cell(x, y, domain::Domain)
+function Bravais.bravais_coordinates_unit_cell(x, y, domain::Domain)
     return bravais_coordinates_unit_cell(x,y,domain.lattice)
 end
+
+
 """
     xb, yb = bravais_coordinates_unit_cell(x, y, sim)
 
 maps cartesian (`x`,`y`) into cartesian (`xb`,`yb`) unit cell specified by
 sim.lat
 """
-function bravais_coordinates_unit_cell(x, y, sim::Simulation)
+function Bravais.bravais_coordinates_unit_cell(x, y, sim::Simulation)
     return bravais_coordinates_unit_cell(x,y,sim.lat)
 end
 
@@ -69,7 +72,7 @@ end
 coordinates in bravais frame specified by sys.domains[domain_index].lattice
 (i.e. (x,y) = p1*v1 + p2*v2)
 """
-function bravais_coordinates(x, y, domain::Int, system::System)
+function Bravais.bravais_coordinates(x, y, domain::Int, system::System)
     return bravais_coordinates(x, y, system.domains[domain])
 end
 """
@@ -78,7 +81,7 @@ end
 coordinates in bravais frame specified by domain.lattice
 (i.e. (x,y) = p1*v1 + p2*v2)
 """
-function bravais_coordinates(x, y, domain::Domain)
+function Bravais.bravais_coordinates(x, y, domain::Domain)
     bravais_coordinates(x, y, domain.lattice)
 end
 """
@@ -87,6 +90,6 @@ end
 coordinates in bravais frame specified by sim.lat
 (i.e. (x,y) = p1*v1 + p2*v2)
 """
-function bravais_coordinates(x, y, sim::Simulation)
+function Bravais.bravais_coordinates(x, y, sim::Simulation)
     return bravais_coordinates(x, y, sim.lat)
 end

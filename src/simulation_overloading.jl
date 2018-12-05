@@ -1,48 +1,3 @@
-#TODO: determind where Bravais(bnd) or Bravais(sim) is used
-"""
-    lattice = Bravais(lattice; :key1 => value1, :key2 => value2, ...)
-
-new lattice from old lattice with modified fields.
-"""
-function Bravais(lattice::Bravais; a=lattice.a, b=lattice.b, α=lattice.α, β=lattice.β, x0=lattice.x0, y0=lattice.y0)
-    return Bravais(;a=a, b=b, α=α, β=β, x0=x0, y0=y0)
-end
-
-
-"""
-    lattice = Bravais(bnd::Boundary)
-
-Rectangular lattice with same size as defined in `bnd` along periodic directions.
-"""
-function Bravais(bnd::Boundary)
-    if :p ∈ bnd.bc[:,1] && bnd.bc[1,1] == bnd.bc[2,1]
-        a = bnd.∂Ω[2,1]-bnd.∂Ω[1,1]
-    elseif :p ∈ bnd.bc[:,1] && bnd.bc[1,1] !== bnd.bc[2,1]
-        throw(ArgumentError("only one of bc[1,1] and bc[2,1] is :p"))
-    else
-        a = Inf
-    end
-    if :p ∈ bnd.bc[:,2] && bnd.bc[1,2] == bnd.bc[2,2]
-        b = bnd.∂Ω[2,2]-bnd.∂Ω[1,2]
-    elseif :p ∈ bnd.bc[:,2] && bnd.bc[1,2] !== bnd.bc[2,2]
-        throw(ArgumentError("only one of bc[1,2] and bc[2,2] is :p"))
-    else
-        b = Inf
-    end
-    return Bravais(a=a, b=b)
-end
-
-
-"""
-    lattice = Bravais(sim::Simulation)
-
-Rectangular lattice with same size as defined in `sim.bnd` along periodic directions.
-"""
-function Bravais(sim::Simulation)
-    return Bravais(sim.bnd)
-end
-
-
 ################################################################################
 ### DOMAIN
 ################################################################################
@@ -91,20 +46,20 @@ end
 ### DISCRETIZATION
 ################################################################################
 """
-    dis = Discretization(dx, sub_pixel_num=30)
+    dis = Discretization(dx, sub_pixel_num=DEFAULT_SUBSAMPLE_NUMBER, coordinate_system=:cart)
 
 discretization object for Simulation
 
 `dx` lattice spacing (scalar)
 
-`sub_pixel_num` number of monte carlo samples used in sub-pixel smoothing
+`sub_pixel_num` is the subsampling rate used in sub-pixel smoothing.
 """
-function Discretization(dx::Real, sub_pixel_num::Int=DEFAULT_SUBSAMPLE_NUMBER::Int, origin=[0.,0.], N=[1,1], dN=[0 0;0 0])
-    return Discretization([dx,dx], sub_pixel_num, origin, N, dN)
+function Discretization(dx::Real, coordinate_system::Symbol=:cart, sub_pixel_num=DEFAULT_SUBSAMPLE_NUMBER, origin=[0.,0.], N=[1,1], dN=[0 0;0 0])
+    return Discretization([dx,dx], coordinate_system, sub_pixel_num, origin, N, dN)
 end
-function Discretization(dx::Array, sub_pixel_num::Int=DEFAULT_SUBSAMPLE_NUMBER::Int)
+function Discretization(dx::Array, coordinate_system::Symbol=:cart, sub_pixel_num::Int=DEFAULT_SUBSAMPLE_NUMBER)
     origin=[0.,0.]; N=[1,1]; dN=[0 0;0 0]
-    return Discretization(dx, sub_pixel_num, origin, N, dN)
+    return Discretization(dx, coordinate_system, sub_pixel_num, origin, N, dN)
 end
 
 
@@ -113,8 +68,8 @@ end
 
 new discretization object from old, with modified fields.
 """
-function Discretization(dis::Discretization; dx=dis.dx, sub_pixel_num=dis.sub_pixel_num)
-    return Discretization(dx, sub_pixel_num, [0., 0.], [1,1], [0 0;0 0])
+function Discretization(dis::Discretization; dx=dis.dx, coordinate_system=dis.coordinate_system, sub_pixel_num=dis.sub_pixel_num)
+    return Discretization(dx, coordinate_system, sub_pixel_num, [0., 0.], [1,1], [0 0;0 0])
 end
 
 
@@ -138,25 +93,29 @@ boundary object for Simulation.
 function Boundary(;∂Ω=fill(NaN,2,2), bc=:d, bl=:none, bl_depth=0)
     return Boundary(∂Ω, bc, bl, bl_depth)
 end
-
-
-function Boundary(∂Ω, bc::Symbol,
-    bl::Array{Symbol,2}, bl_depth::Array{T,2}) where T
+function Boundary(∂Ω,
+        bc::Symbol, bl::Array{Symbol,2}, bl_depth::Array{T,2}) where T
     return Boundary(∂Ω, fill(bc,2,2), bl, bl_depth)
 end
-
-
 function Boundary(∂Ω, bc,
-    bl::Symbol, bl_depth::Array{T,2}) where T
+        bl::Symbol, bl_depth::Array{T,2}) where T
     return Boundary(∂Ω, bc, fill(bl,2,2), bl_depth)
 end
-
-
-function Boundary(∂Ω, bc,
-    bl, bl_depth::Number)
+function Boundary(∂Ω, bc, bl,
+    bl_depth::Number)
     return Boundary(∂Ω, bc, bl, fill(bl_depth,2,2))
 end
-
+function Boundary(;r::Real, bc::Symbol=:d, bl=:none, bl_depth=0)
+    ∂Ω = [0   0
+          r  2π]
+    bc = [:d :p
+          bc :p]
+    bl = [:none :none
+          bl    :none]
+    bl_depth = [0        0
+                bl_depth 0]
+    return Boundary(∂Ω, bc, bl, bl_depth)
+end
 
 """
     bnd = Boundary(bnd; :key1 => value1, :key2 => value2, ...)

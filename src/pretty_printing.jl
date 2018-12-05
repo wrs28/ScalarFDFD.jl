@@ -59,37 +59,37 @@ Base.show(io::IO, bnd::Boundary) = begin
         print(io, typeof(bnd), ": \n")
     end
 
-    print(io, "\t\t-------------------------\n")
+    print(io, "\t\t\t-------------------------\n")
 
-    print(io, "\tbound.\t|\t   ", fmt("6s",bnd.bc[2,2]), "\t|\n")
-    print(io, "\tcond-\t|   ",fmt("6s",bnd.bc[1,1]), "\t   ", fmt("5s",bnd.bc[2,1]), "|\n")
-    print(io, "\t ition\t|\t   ", fmt("6s",bnd.bc[1,2]), "\t|\n")
+    print(io, "\tbound.\t|\t\t   ", fmt("6s",bnd.bc[2,2]), "\t\t|\n")
+    print(io, "\tcond-\t|   ",fmt("6s",bnd.bc[1,1]), "\t\t   ", fmt("5s",bnd.bc[2,1]), "|\n")
+    print(io, "\t ition\t|\t\t   ", fmt("6s",bnd.bc[1,2]), "\t\t|\n")
 
-    print(io, "\t\t-------------------------\n")
+    print(io, "\t\t\t-------------------------\n")
 
-    print(io, "\t\t|\t", fmt("+5.3f",bnd.∂Ω[2,2]), "\t\t|\n")
-    print(io, "\t∂Ω\t| ", fmt("+5.3f",bnd.∂Ω[1,1]), "\t", fmt("+5.3f",bnd.∂Ω[2,1]), "\t|\n")
-    print(io, "\t\t|\t", fmt("+5.3f",bnd.∂Ω[1,2]), "\t\t|\n")
+    print(io, "\t\t\t|\t\t", fmt("+5.3f",bnd.∂Ω[2,2]), "\t\t\t|\n")
+    print(io, "\t∂Ω\t\t| ", fmt("+5.3f",bnd.∂Ω[1,1]), "\t\t", fmt("+5.3f",bnd.∂Ω[2,1]), "\t|\n")
+    print(io, "\t\t\t|\t\t", fmt("+5.3f",bnd.∂Ω[1,2]), "\t\t\t|\n")
 
-    print(io, "\t\t-------------------------\n")
+    print(io, "\t\t\t-------------------------\n")
 
-    print(io, "\t\t|\t", fmt("+5.3f",bnd.∂Ω_tr[2,2]), "\t\t|\n")
-    print(io, "\t∂Ω_tr\t| ",fmt("+5.3f",bnd.∂Ω_tr[1,1]), "\t", fmt("+5.3f",bnd.∂Ω_tr[2,1]), "\t|\n")
-    print(io, "\t\t|\t", fmt("+5.3f",bnd.∂Ω_tr[1,2]), "\t\t|\n")
+    print(io, "\t\t\t|\t\t", fmt("+5.3f",bnd.∂Ω_tr[2,2]), "\t\t\t|\n")
+    print(io, "\t∂Ω_tr\t| ",fmt("+5.3f",bnd.∂Ω_tr[1,1]), "\t\t", fmt("+5.3f",bnd.∂Ω_tr[2,1]), "\t|\n")
+    print(io, "\t\t\t|\t\t", fmt("+5.3f",bnd.∂Ω_tr[1,2]), "\t\t\t|\n")
 
-    print(io, "\t\t-------------------------\n")
+    print(io, "\t\t\t-------------------------\n")
 
-    print(io, "\tbound.\t|\t", fmt("8s",bnd.bl[2,2]), "\t|\n")
-    print(io, "\tlayer\t|",fmt("8s",bnd.bl[1,1]), "\t", fmt("8s",bnd.bl[2,1]), "|\n")
-    print(io, "\t\t|\t", fmt("8s",bnd.bl[1,2]), "\t|\n")
+    print(io, "\tbound.\t|\t\t", fmt("8s",bnd.bl[2,2]), "\t\t|\n")
+    print(io, "\tlayer\t|",fmt("8s",bnd.bl[1,1]), "\t\t", fmt("8s",bnd.bl[2,1]), "|\n")
+    print(io, "\t\t\t|\t\t", fmt("8s",bnd.bl[1,2]), "\t\t|\n")
 
-    print(io, "\t\t-------------------------\n")
+    print(io, "\t\t\t-------------------------\n")
 
-    print(io, "\tbound.\t|\t", fmt("+5.3f",bnd.bl_depth[2,2]), "\t\t|\n")
-    print(io, "\tlayer\t| ",fmt("+5.3f",bnd.bl_depth[1,1]), "\t", fmt("+5.3f",bnd.bl_depth[2,1]), "\t|\n")
-    print(io, "\tdepth\t|\t", fmt("+5.3f",bnd.bl_depth[1,2]), "\t\t|\n")
+    print(io, "\tbound.\t|\t\t", fmt("+5.3f",bnd.bl_depth[2,2]), "\t\t\t|\n")
+    print(io, "\tlayer\t| ",fmt("+5.3f",bnd.bl_depth[1,1]), "\t\t", fmt("+5.3f",bnd.bl_depth[2,1]), "\t|\n")
+    print(io, "\tdepth\t|\t\t", fmt("+5.3f",bnd.bl_depth[1,2]), "\t\t\t|\n")
 
-    print(io, "\t\t-------------------------\n")
+    print(io, "\t\t\t-------------------------\n")
 end
 
 
@@ -101,7 +101,14 @@ Base.show(io::IO, dis::Discretization) = begin
     print(io, "\tN: ", dis.N, "\n",
     # "\ttruncated N: ", dis.N_tr, "\n",
     "\tsub-pixel number: ", dis.sub_pixel_num, "\n",
-    "\tdx: ", dis.dx)
+    "\tdx: ", dis.dx, "\n")
+    if isCartesian(dis.coordinate_system)
+        print(io, "\tcoordinates: Cartesian")
+    elseif isPolar(dis.coordinate_system)
+        print(io, "\tcoordinates: Polar")
+    else
+        print(io, "\tcoordinates: ", dis.coordinate_system)
+    end
 end
 
 
@@ -191,7 +198,7 @@ Base.show(io::IO, sim::Simulation) = begin
 end
 
 ### BRAVAIS LATTICE STRUCT
-Base.show(io::IO, bvl::Bravais) = begin
+Base.show(io::IO, bvl::BravaisLattice) = begin
     if !get(io, :sub, false)
         print(io, typeof(bvl), ": \n",
         "\tprimitive vector 1: ", fmt("3.2f",bvl.a), ", ∠", fmt("3.2f",(mod2pi(bvl.α))*180/pi), "°\n",

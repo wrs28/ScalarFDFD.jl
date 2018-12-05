@@ -1,6 +1,7 @@
-#    TODO: sub_pixel_smoothing in 2-dim case, take care of smoothing along edges
-#    TODO: fix Bravais in 1-dimension
-#TODO: build_channels! higher order band gaps
+# TODO: sub_pixel_smoothing in 2-dim case, take care of smoothing along edges
+# TODO: fix Bravais in 1-dimension
+# TODO: build_channels! higher order band gaps
+
 ################################################################################
 ###############   SUB PIXEL SMOOTHING    #######################################
 ################################################################################

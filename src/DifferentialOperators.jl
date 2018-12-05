@@ -24,7 +24,9 @@ RobinBoundaryCondition,
 PeriodicBoundaryCondition,
 ezbc,
 gradient,
-laplacian
+laplacian,
+isPolar,
+isCartesian
 
 # must define here for type stability later
 function ⊗(A,B)
