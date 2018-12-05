@@ -2,3 +2,5 @@
 tests/
 
 .DS_Store
+
+Manifest.toml
