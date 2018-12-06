@@ -2,11 +2,13 @@ module SimulationDefinition
 
 using Bravais,
 DifferentialOperators,
+Formatting,
 Interpolations,
 RecipesBase
 
 
-export Domain,
+export BravaisLattice,
+Domain,
 System,
 Discretization,
 Boundary,
@@ -23,5 +25,8 @@ include("simulation_overloading.jl")
 include("bravais_overloading.jl")
 
 include("iss.jl")
+
+include("simulation_pretty_printing.jl")
+include("simulation_plot.jl")
 
 end # module

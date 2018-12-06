@@ -1,6 +1,7 @@
 module Bravais
 
-using RecipesBase
+using Formatting,
+RecipesBase
 
 export BravaisLattice,
 bravais_coordinates_unit_cell,
@@ -98,6 +99,36 @@ function bravais_coordinates_unit_cell(x, y, lattice::BravaisLattice)
     end
     return xb, yb
 end
+function bravais_coordinates_unit_cell(x, y, lattices::Array{BravaisLattice})
+
+    P = bravais_coordinates_unit_cell.(x, y, lattices)
+    xb = Array{Float64}(undef, size(P))
+    yb = Array{Float64}(undef, size(P))
+    for i ∈ eachindex(P)
+        xb[i] = P[i][1]
+        yb[i] = P[i][2]
+    end
+    return xb, yb
+end
+
+
+"""
+    xb, yb = bravais_coordinates_unit_cell(x, y, lattice)
+
+maps cartesian (`x`,`y`) into cartesian (`xb`,`yb`) unit cell specified by
+lattice
+"""
+function bravais_coordinates_unit_cell!(xb::Array{Float64}, yb::Array, x, y, lattice::BravaisLattice)
+
+    P = bravais_coordinates_unit_cell.(x, y, Ref(lattice))
+    @assert size(P)==size(xb) "x-array (first argument) size=$(size(xb)) is not size x×y=$(size(P))"
+    @assert size(P)==size(xb) "y-array (second argument) size=$(size(yb)) is not size x×y=$(size(P))"
+    for i ∈ eachindex(P)
+        xb[i] = P[i][1]
+        yb[i] = P[i][2]
+    end
+    return nothing
+end
 
 
 """
@@ -136,8 +167,11 @@ end
 
 
 """
-    plot(lattice::BravaisLattice, N)
     plot(lattice::BravaisLattice, N=[4,4])
+
+scatter plot of lattice vectors from -`N[i]`:`+N[i]` for each dimension i.
+
+If `N` is a scalar, uses same span for both dimensions.
 """
 @recipe function f(lattice::BravaisLattice, N::Array{Int,1}=[4,4])
     seriestype --> :scatter
@@ -169,5 +203,27 @@ end
 @recipe function f(lattice::BravaisLattice, N::Int)
     lattice, [N,N]
 end
+
+
+# pretty printing of BravaisLattice
+Base.show(io::IO, bvl::BravaisLattice) = begin
+    if !get(io, :sub, false)
+        print(io, typeof(bvl), ": \n",
+        "\tprimitive vector 1: ", fmt("3.2f",bvl.a), ", ∠", fmt("3.2f",(mod2pi(bvl.α))*180/pi), "°\n",
+        "\tprimitive vector 2: ", fmt("3.2f",bvl.b), ", ∠", fmt("3.2f",(mod2pi(bvl.β))*180/pi), "°\n",
+        "\torigin: (", fmt("3.2f",bvl.x0), ", ", fmt("3.2f",bvl.y0), ")")
+    elseif !get(io, :sub1, false)
+        print(io,
+        "\n\tprimitive vector 1: ", fmt("3.2f",bvl.a), ", ∠", fmt("3.2f",(mod2pi(bvl.α))*180/pi), "°\n",
+        "\tprimitive vector 2: ", fmt("3.2f",bvl.b), ", ∠", fmt("3.2f",(mod2pi(bvl.β))*180/pi), "°\n",
+        "\torigin: (", fmt("3.2f",bvl.x0), ", ", fmt("3.2f",bvl.y0), ")")
+    else
+        print(io,
+        "\n\t\tprimitive vector 1: ", fmt("3.2f",bvl.a), ", ∠", fmt("3.2f",(mod2pi(bvl.α))*180/pi), "°\n",
+        "\t\tprimitive vector 2: ", fmt("3.2f",bvl.b), ", ∠", fmt("3.2f",(mod2pi(bvl.β))*180/pi), "°\n",
+        "\t\torigin: (", fmt("3.2f",bvl.x0), ", ", fmt("3.2f",bvl.y0), ")")
+    end
+end
+
 
 end # module

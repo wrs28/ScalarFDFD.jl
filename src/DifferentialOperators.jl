@@ -629,7 +629,7 @@ end # apply_bc
 """
 function isCartesian(coordinate_system::Symbol)
     validNames = [:Cartesian, :cartesian, :Cart, :cart]
-    return coordinate_system ∈ validNames ? true : false
+    return coordinate_system ∈ validNames
 end
 
 
@@ -638,7 +638,7 @@ end
 """
 function isPolar(coordinate_system::Symbol)
     validNames = [:Polar, :polar, :Pol, :pol, :Cylindrical, :cylindrical, :Cyl, :cyl]
-    return coordinate_system ∈ validNames ? true : false
+    return coordinate_system ∈ validNames
 end
 
 
@@ -647,7 +647,7 @@ end
 """
 function isCentral(polarity::Symbol)
     validNames = [:central, :Central, :center, :Center, :symmetric, :Symmetric, :cen, :Cen, :sym, :Sym, :c, :s, :C, :S]
-    return polarity ∈ validNames ? true : false
+    return polarity ∈ validNames
 end
 
 
@@ -656,7 +656,7 @@ end
 """
 function isBackward(polarity::Symbol)
     validNames = [:backward, :Backward, :back, :Back, :b, :B, :backwards, :Backwards]
-    return polarity ∈ validNames ? true : false
+    return polarity ∈ validNames
 end
 
 """
@@ -664,7 +664,7 @@ end
 """
 function isForward(polarity::Symbol)
     validNames = [:forward, :Forward, :for, :For, :f, :F, :forwards, :Forwards]
-    return polarity ∈ validNames ? true : false
+    return polarity ∈ validNames
 end
 
 end # module

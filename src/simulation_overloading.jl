@@ -6,19 +6,23 @@
 
 New domain structure from old with modified fields
 """
-function Domain(dom::Domain; is_in_domain=dom.is_in_domain, n₁=dom.n₁, n₂=dom.n₂,
-                F=dom.F, domain_params=dom.domain_params, domain_type=dom.domain_type,
-                lattice=dom.lattice, is_in_region=dom.is_in_region, region_params=dom.region_params,
-                n₁_val=dom.n₁_val, n₁_idx=dom.n₁_idx, n₂_val=dom.n₂_val,
-                n₂_idx=dom.n₂_idx, F_val=dom.F_val, F_idx=dom.F_idx,
-                which_asymptote=dom.which_asymptote, which_waveguide=dom.which_waveguide)
-    return Domain(;is_in_domain=is_in_domain, n₁=n₁, n₂=n₂, F=F, domain_params=domain_params,
-                domain_type=domain_type, lattice=lattice, is_in_region=is_in_region,
-                region_params=region_params, n₁_val=n₁_val, n₁_idx=n₁_idx,
-                n₂_val=n₂_val, n₂_idx=n₂_idx, F_val=F_val, F_idx=F_idx,
-                which_asymptote=which_asymptote, which_waveguide=which_waveguide)
+function Domain(dom::Domain;
+    is_in_domain = is_in_domain,
+    domain_params = domain_params,
+    domain_type = domain_type,
+    domain_ε = domain_ε,
+    is_in_subdomain = is_in_subdomain,
+    subdomain_params = subdomain_params,
+    subdomain_type = subdomain_type,
+    subdomain_ε = subdomain_ε,
+    lattice = lattice,
+    which_asymptote = which_asymptote,
+    which_waveguide = which_waveguide)
+    return Domain(;is_in_domain = is_in_domain, domain_params = domain_params, domain_type = domain_type,
+            domain_ε = domain_ε, is_in_subdomain = is_in_subdomain, subdomain_params = subdomain_params,
+            subdomain_type = subdomain_type, subdomain_ε = subdomain_ε, lattice = lattice,
+            which_asymptote = which_asymptote, which_waveguide = which_waveguide)
 end
-
 
 
 ################################################################################
@@ -90,7 +94,20 @@ boundary object for Simulation.
 
 `bl_depth` scalar or array of boundary layer depths
 """
-function Boundary(;∂Ω=fill(NaN,2,2), bc=:d, bl=:none, bl_depth=0)
+function Boundary(;∂Ω=fill(NaN,2,2), bc=:d, bl=:none, bl_depth=0, r::Real=NaN)
+    if !isnan(r)
+        @assert typeof(bc)<:Symbol "type of bc is $(typeof(bc)). when radius is specified, bc must be Symbol"
+        @assert typeof(bl)<:Symbol "type of bl is $(typeof(bl)). when radius is specified, bl must be Symbol"
+        @assert typeof(bl_depth)<:Number "type of bl_depth is $(typeof(bl_depth)). when radius is specified, bl_depth must be Number"
+        ∂Ω = [0   0
+              r  2π]
+        bc = [:d :p
+              bc :p]
+        bl = [:none :none
+              bl    :none]
+        bl_depth = [0        0
+                    bl_depth 0]
+    end
     return Boundary(∂Ω, bc, bl, bl_depth)
 end
 function Boundary(∂Ω,
@@ -105,17 +122,7 @@ function Boundary(∂Ω, bc, bl,
     bl_depth::Number)
     return Boundary(∂Ω, bc, bl, fill(bl_depth,2,2))
 end
-function Boundary(;r::Real, bc::Symbol=:d, bl=:none, bl_depth=0)
-    ∂Ω = [0   0
-          r  2π]
-    bc = [:d :p
-          bc :p]
-    bl = [:none :none
-          bl    :none]
-    bl_depth = [0        0
-                bl_depth 0]
-    return Boundary(∂Ω, bc, bl, bl_depth)
-end
+
 
 """
     bnd = Boundary(bnd; :key1 => value1, :key2 => value2, ...)
@@ -205,7 +212,7 @@ function Simulation(dom::Domain; bnd::Boundary=Boundary(bc=:p), dis::Discretizat
         bnd.∂Ω[1,2] = lattice.y0
         bnd.∂Ω[2,2] = lattice.y0+Nb*lattice.b*sin(lattice.β)
     end
-    return deepcopy(Simulation(sys=System(dom); bnd=Boundary(bnd), dis=dis, tls=tls, lat=Bravais(lattice; :a=>Na*lattice.a, :b=>Nb*lattice.b)))
+    return deepcopy(Simulation(sys=System(dom); bnd=Boundary(bnd), dis=dis, tls=tls, lat=BravaisLattice(lattice; :a=>Na*lattice.a, :b=>Nb*lattice.b)))
 end
 
 
@@ -242,5 +249,5 @@ new simulation object from old, with modified fields.
 """
 function Simulation(sim::Simulation; sys=sim.sys, bnd=sim.bnd, dis=sim.dis, sct=sim.sct, tls=sim.tls, lat=sim.lat, disp_opt=false)
     return deepcopy(Simulation(sys=System(sys), bnd=Boundary(bnd), dis=Discretization(dis),
-            sct=Scattering(sct), tls=TwoLevelSystem(tls), lat=Bravais(lat), disp_opt=disp_opt))
+            sct=Scattering(sct), tls=TwoLevelSystem(tls), lat=BravaisLattice(lat), disp_opt=disp_opt))
 end

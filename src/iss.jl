@@ -52,3 +52,84 @@ end
 function isHalfSpace(dom::Domain)
     return dom.domain_type ∈ [:halfspace_waveguide]
 end
+
+
+"""
+    isDirichlet(bc)
+"""
+function isDirichlet(bc::Symbol)
+    validNames = [:d, :D, :dirichlet, :Dirichlet, :hard, :h]
+    return bc ∈ validNames
+end
+
+
+"""
+    isNeumann(bc)
+"""
+function isNeumann(bc::Symbol)
+    validNames = [:d, :D, :dirichlet, :Dirichlet, :hard, :h]
+    return bc ∈ validNames
+end
+
+
+"""
+    isOpen(bc)
+"""
+function isOpen(bc::Symbol)
+    validNames = [:o, :open, :Open]
+    return bc ∈ validNames
+end
+
+
+"""
+    isPeriodic(bc)
+"""
+function isPeriodic(bc::Symbol)
+    validNames = [:p, :periodic, :Periodic, :bloch, :Bloch]
+    return bc ∈ validNames
+end
+
+
+"""
+    isPMLout(bl)
+"""
+function isPMLout(bl::Symbol)
+    validNames = [:pml_out, :PML_OUT, :PML_out, :pml, :PML]
+    return bl ∈ validNames
+end
+
+
+"""
+    isPMLin(bl)
+"""
+function isPMLin(bl::Symbol)
+    validNames = [:pml_in, :PML_IN, :PML_in, :pml_conj, :PML_conj]
+    return bl ∈ validNames
+end
+
+
+"""
+    isABSout(bl)
+"""
+function isABSout(bl::Symbol)
+    validNames = [:abs_out, :ABS_OUT, :ABS_out, :abs, :ABS, :amp, :AMP]
+    return bl ∈ validNames
+end
+
+
+"""
+    isABSin(bl)
+"""
+function isABSin(bl::Symbol)
+    validNames = [:abs_in, :ABS_IN, :ABS_in, :abs_conj, :ABS_conj]
+    return bl ∈ validNames
+end
+
+
+"""
+    isNone(bl)
+"""
+function isNone(bl::Symbol)
+    validNames = [:none, :nothing, :empty]
+    return bl ∈ validNames
+end

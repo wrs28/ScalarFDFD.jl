@@ -50,9 +50,7 @@ struct Domain
 
         num_subdomains= 1 + length(is_in_subdomain)
 
-        if which_asymptote ==:none && which_waveguide !== 0
-            throw(ArgumentError("assigned waveguide id $(which_waveguide) to non-asymptotic domain"))
-        end
+        @assert !(which_asymptote==:none && which_waveguide!==0) "assigned waveguide id $(which_waveguide) to non-asymptotic domain"
 
         return new(is_in_domain, domain_params, domain_type, domain_ε,
         is_in_subdomain, subdomain_params, subdomain_type, subdomain_ε,
@@ -183,14 +181,12 @@ struct Discretization
             end
         end
 
+        @assert (isCartesian(coordinate_system) | isPolar(coordinate_system)) "unrecognized coordinate system $coordinate_system"
         if isCartesian(coordinate_system)
-            X =   x[1] .+ 0*x[2]
-            Y = 0*x[1] .+   x[2]
-        elseif isPolar(coordinate_system)
+            X, Y = broadcast((x,y)->x,x[1],x[2]), broadcast((x,y)->y,x[1],x[2])
+        else
             X = x[1].*cos.(x[2])
             Y = x[1].*sin.(x[2])
-        else
-            throw(ArgumentError("unrecognized coordinate system $coordinate_system"))
         end
 
         X_idx = LinearIndices(Array{Bool}(undef, N...))[x_idx...][:]
@@ -384,11 +380,8 @@ struct Simulation
         end
 
         dx = dis.dx
-        try
-            N = round.(Int,L./dx)
-        catch
-            throw(ArgumentError("lattice spacings $dx inconsistent with size $L"))
-        end
+        @assert all(L./dx .< Inf) "lattice spacings $dx inconsistent with size $L"
+        N = round.(Int,L./dx)
 
         dN = Array{Int}(undef,2,2)
         index1 = findmin(N)[2]

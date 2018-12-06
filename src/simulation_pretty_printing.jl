@@ -187,27 +187,12 @@ end
 Base.show(io::IO, sim::Simulation) = begin
     print(IOContext(io, :sub=>true),
     typeof(sim), ": \n\n",
-    "sys: ", sim.sys, "\n\n",
-    "bnd: ", sim.bnd, "\n\n",
-    "dis: ", sim.dis, "\n\n",
-    "sct: ", sim.sct, "\n\n",
-    "tls: ", sim.tls)
+    "sys: \n", sim.sys, "\n\n",
+    "bnd: \n", sim.bnd, "\n\n",
+    "dis: \n", sim.dis, "\n\n",
+    "sct: \n", sim.sct, "\n\n",
+    "tls: \n", sim.tls)
     if [sim.lat.a, sim.lat.b] !== [Inf,Inf]
-        print(io, "\n\nlat: ", sim.lat)
-    end
-end
-
-### BRAVAIS LATTICE STRUCT
-Base.show(io::IO, bvl::BravaisLattice) = begin
-    if !get(io, :sub, false)
-        print(io, typeof(bvl), ": \n",
-        "\tprimitive vector 1: ", fmt("3.2f",bvl.a), ", ∠", fmt("3.2f",(mod2pi(bvl.α))*180/pi), "°\n",
-        "\tprimitive vector 2: ", fmt("3.2f",bvl.b), ", ∠", fmt("3.2f",(mod2pi(bvl.β))*180/pi), "°\n",
-        "\torigin: (", fmt("3.2f",bvl.x0), ", ", fmt("3.2f",bvl.y0), ")")
-    else
-        print(io,
-        "\n\t\tprimitive vector 1: ", fmt("3.2f",bvl.a), ", ∠", fmt("3.2f",(mod2pi(bvl.α))*180/pi), "°\n",
-        "\t\tprimitive vector 2: ", fmt("3.2f",bvl.b), ", ∠", fmt("3.2f",(mod2pi(bvl.β))*180/pi), "°\n",
-        "\t\torigin: (", fmt("3.2f",bvl.x0), ", ", fmt("3.2f",bvl.y0), ")")
+        print(IOContext(io, :sub=>true, :sub1=>false), "\n\nlat: ", sim.lat)
     end
 end
