@@ -70,7 +70,8 @@ input can be array or scalar.
 struct System
     domains::Array{Domain,1}
     ε::Array{ComplexF64,2}
-    Σ::Array{ComplexF64,2}
+    Σd::Array{ComplexF64,2}
+    Σe::Array{ComplexF64,2}
 
     domain_by_region::Array{Int,1}
     params_by_region::Array{Dict{Symbol,T},1} where T<:Number
@@ -83,7 +84,8 @@ struct System
 
     function System(domains::Array{Domain,1} = [Domain()],
                     ε::Array{ComplexF64,2} = Array{ComplexF64}(undef, 0, 0),
-                    Σ::Array{ComplexF64,2} = Array{ComplexF64}(undef, 0, 0),
+                    Σd::Array{ComplexF64,2} = Array{ComplexF64}(undef, 0, 0),
+                    Σe::Array{ComplexF64,2} = Array{ComplexF64}(undef, 0, 0),
                     regions::Array{Int,2} = Array{Int}(undef, 0, 0))
 
         # protect from downstream changes
@@ -129,7 +131,7 @@ struct System
 
         waveguides = sort(unique([domains[i].which_waveguide for i ∈ eachindex(domains)]))[2:end]
 
-        return new(domains, ε, Σ, domain_by_region, params_by_region, ε_by_region, regions, num_prev_regions, waveguides)
+        return new(domains, ε, Σd, Σe, domain_by_region, params_by_region, ε_by_region, regions, num_prev_regions, waveguides)
     end
 end
 
@@ -430,8 +432,8 @@ struct Simulation
         end
 
         ɛ, regions = sub_pixel_smoothing(bnd, dis, sys; disp_opt=disp_opt)
-        Σ = σ(dis, bnd)
-        sys = System(sys.domains, ε, Σ, regions)
+        Σd, Σe = σ(dis, bnd)
+        sys = System(sys.domains, ε, Σd, Σe, regions)
 
         for i ∈ 1:length(sct.waveguides_used)
             sct.ɛ₀[i] = Array{ComplexF64}(undef,dis.N[1],dis.N[2])

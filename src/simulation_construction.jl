@@ -236,11 +236,11 @@ end
 ### BOUNDARY LAYERS
 ################################################################################################
 """
-    Σ = σ(x, y, bnd, side::Symbol)
-    Σ = σ(dis, bnd)
-    Σ = σ(sim)
+    Σd, Σe = σ(x, y, bnd, side::Symbol)
+    Σd, Σe = σ(dis, bnd)
+    Σd, Σe = σ(sim)
 
-conductivity for absorbing layer (PML or not)
+conductivity for absorbing layer (PML or not). `1/(1+Σd/k)` is sandwiched between derivatives in laplacian, `(1+Σe/k) multiplies ε`
 """
 function σ(x::Real,y::Real,bnd::Boundary,side::Symbol)
     α = bnd.α
@@ -257,24 +257,33 @@ function σ(x::Real,y::Real,bnd::Boundary,side::Symbol)
     end
     pos = (x,y)
     if sign(bnd.∂Ω_tr[i,j] - pos[j])*(-1)^i ≤ 0
-         u = abs(pos[j]-bnd.∂Ω_tr[i,j])/bnd.bl_depth[i,j]
-         β = 2*sqrt(bnd.bl_depth[i,j])
-         Σ = α[i,j]*u*(exp(β*u)-1)/(exp(β)-1)
+         u = abs(pos[j]-bnd.∂Ω_tr[i,j])/(bnd.bl_depth[i,j] + eps())
+         β = 2*sqrt(bnd.bl_depth[i,j]) + eps()
+         Σ = α[i,j]*u*expm1(β*u)/expm1(β)
      else
          Σ = complex(0.)
     end
     return Σ
 end
 function σ(dis::Discretization, bnd::Boundary)
-    Σ = zeros(ComplexF64,dis.N[1]+1,dis.N[2]+1)
-    x = vcat(dis.x[1] .- dis.dx[1]/2, dis.x[1][end] + dis.dx[1]/2)
-    y = hcat(dis.x[2] .- dis.dx[2]/2, dis.x[2][end] + dis.dx[2]/2)
-    X, Y = broadcast((x,y)->x, x,y), broadcast((x,y)->y, x,y)
-    Σ += σ.(X, Y, Ref(bnd), :left)
-    Σ += σ.(X, Y, Ref(bnd), :right)
-    Σ += σ.(X, Y, Ref(bnd), :bottom)
-    Σ += σ.(X, Y, Ref(bnd), :top)
-    return Σ
+    Σ1 = zeros(ComplexF64,dis.N[1]+1,dis.N[2]+1)
+    Σ2 = zeros(ComplexF64,dis.N[1]  ,dis.N[2]  )
+    x1 = vcat(dis.x[1] .- dis.dx[1]/2, dis.x[1][end] + dis.dx[1]/2)
+    y1 = hcat(dis.x[2] .- dis.dx[2]/2, dis.x[2][end] + dis.dx[2]/2)
+    x2, y2 = dis.x[1], dis.x[2]
+    if isPolar(dis.coordinate_system)
+        X1, Y1 = x1.*cos.(y1), x1.*sin.(y1)
+        X2, Y2 = x2.*cos.(y2), x2.*sin.(y2)
+    else
+        X1, Y1 = broadcast((x,y)->x, x1,y1), broadcast((x,y)->y, x1,y1)
+        X2, Y2 = broadcast((x,y)->x, x2,y2), broadcast((x,y)->y, x2,y2)
+    end
+    sides = [:left, :right, :bottom, :top]
+    for s ∈ sides
+        Σ1 += σ.(X1, Y1, Ref(bnd), s)
+        Σ2 += σ.(X2, Y2, Ref(bnd), s)
+    end
+    return Σ1, Σ2
 end
 function σ(sim::Simulation)
     return σ(sim.dis, sim.bnd)

@@ -5,7 +5,6 @@ const EXTINCTION = 1e-8
 const SCALING_ANGLE = .25
 
 ################################################################################
-const MINIMUM_F = 1e-16
 const TRANSVERSE_MODE_RESOLUTION_MULTIPLIER = 3
 const PROPAGATION_CONSTANT_IMAGINARY_TOLERANCE = 1e-2
 const ANALYSIS_QUADRATURE_POINTS = 31

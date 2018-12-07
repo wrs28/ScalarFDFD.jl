@@ -454,15 +454,15 @@ Compute ∇⋅(`h`∇) on a 2-dim lattice with `N[1]`×`N[2]` sites, spacings `d
 See also: [`ezbc`](@ref), [`grad`](@ref)
 """
 function laplacian(N::Array{Int}, dx, bcs::Tuple{U, V};
-            ka::Number=0, kb::Number=0, coordinate_system::Symbol=:cart, h=1) where U<:BoundaryCondition where V<:BoundaryCondition
+            ka::Number=0, kb::Number=0, coordinate_system::Symbol=:cart, h=ones(N...)) where U<:BoundaryCondition where V<:BoundaryCondition
 
-    ∇1² = laplacian_sans_bc(N[1], dx[1], h, coordinate_system)
-    ∇2² = laplacian_sans_bc(N[2], dx[2], h, :cart)
+    ∇1² = laplacian_sans_bc(N[1], dx[1], h[:,1], coordinate_system)
+    ∇2² = laplacian_sans_bc(N[2], dx[2], h[1,:], :cart)
     𝕀1, 𝕀2 = sparse(I, N[1], N[1]), sparse(I, N[2], N[2])
     ∇₁², ∇₂² = 𝕀2 ⊗ ∇1², ∇2² ⊗ 𝕀1
 
-    ∇₁², S1 = laplacian_apply_bc(∇₁², N, dx, bcs, 1, h, ka, kb, coordinate_system)
-    ∇₂², S2 = laplacian_apply_bc(∇₂², N, dx, bcs, 2, h, ka, kb, coordinate_system)
+    ∇₁², S1 = laplacian_apply_bc(∇₁², N, dx, bcs, 1, h[:,1], ka, kb, coordinate_system)
+    ∇₂², S2 = laplacian_apply_bc(∇₂², N, dx, bcs, 2, h[1,:], ka, kb, coordinate_system)
 
     if isPolar(coordinate_system)
         r⁻² = 𝕀2⊗sparse(1:N[1],1:N[1], 1 ./(dx[1]*(1/2 .+ (0:N[1]-1))).^2, N[1], N[1])
@@ -616,7 +616,7 @@ function apply_bc(D, operator, N, dx, bc, dim, h::Number, polarity::Symbol, ka::
     return apply_bc(D, operator, N, dx, bc, dim, fill(h,N[dim]), polarity, ka, kb, coordinate_system)
 end
 function apply_bc(D, operator::Symbol, N::Array{Int}, dx::Array{U,1}, bc::Tuple{T,S}, dim::Int, h::AbstractArray{V,1},
-            polarity::Symbol, ka::Number, kb::Number, coordinate_system::Symbol) where U<:Real where V<:Real where T<:BoundaryCondition where S<:BoundaryCondition
+            polarity::Symbol, ka::Number, kb::Number, coordinate_system::Symbol) where U<:Real where V<:Number where T<:BoundaryCondition where S<:BoundaryCondition
     return apply_bc(D, operator, N, dx[dim], bc[dim], dim, h[dim], polarity, ka, kb, coordinate_system)
 end # apply_bc
 
