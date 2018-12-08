@@ -52,7 +52,7 @@ domain.lattice
 function Bravais.bravais_coordinates_unit_cell(x, y, domain::Domain)
     return bravais_coordinates_unit_cell(x, y, domain.lattice)
 end
-function Bravais.bravais_coordinates_unit_cell(x, y, domains::Array{Domain})
+function Bravais.bravais_coordinates_unit_cell(x, y, domains::Array{Tdom}) where Tdom<:Domain
     lattices = Array{BravaisLattice}(undef,size(x,1),size(y,2))
     for i ∈ CartesianIndices(domains)
         lattices[i] = domains[i].lattice

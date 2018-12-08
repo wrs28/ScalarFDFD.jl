@@ -7,10 +7,12 @@
         domain_params = Dict(:n₁ => 1, :n₂ => 0, :F => 0),
         domain_type = :background,
         domain_ε::Function = piecewise_constant_ε,
+        domain_F::Function = piecewise_constant_F,
         is_in_subdomain = Function[],
         subdomain_params = Dict{Symbol,Float64}[],
         subdomain_type = Symbol[],
         subdomain_ε = Function[],
+        subdomain_F = Function[],
         lattice = Bravais(),
         which_asymptote = :none,
         which_waveguide = 0)
@@ -19,16 +21,18 @@
 
 INCOMPLETE DOCUMENTATION
 """
-struct Domain
+struct Domain{Tdp,Tsp}
     is_in_domain::Function
-    domain_params::Dict{Symbol,T} where T<:Number
+    domain_params::Tdp
     domain_type::Symbol
     domain_ε::Function
+    domain_F::Function
 
     is_in_subdomain::Array{Function,1}
-    subdomain_params::Array{Dict{Symbol,U},1} where U<:Number
+    subdomain_params::Array{Tsp,1}
     subdomain_type::Array{Symbol,1}
     subdomain_ε::Array{Function,1}
+    subdomain_F::Array{Function,1}
 
     lattice::BravaisLattice
     which_asymptote::Symbol
@@ -37,23 +41,25 @@ struct Domain
     num_subdomains::Int
 
     function Domain(; is_in_domain::Function = whole_domain,
-        domain_params::Dict{Symbol,V} = Dict(:n₁ => 1, :n₂ => 0, :F => 0),
+        domain_params::Td = Dict(:n₁ => 1, :n₂ => 0, :F => 0),
         domain_type::Symbol = :background,
         domain_ε::Function = piecewise_constant_ε,
+        domain_F::Function = piecewise_constant_F,
         is_in_subdomain::Array{Function,1} = Function[],
-        subdomain_params::Array{Dict{Symbol,W},1} = Dict{Symbol,Float64}[],
+        subdomain_params::Array{Ts,1} = Dict{Symbol,Float64}[],
         subdomain_type::Array{Symbol,1} = Symbol[],
         subdomain_ε::Array{Function} = Function[],
+        subdomain_F::Array{Function} = Function[],
         lattice::BravaisLattice = BravaisLattice(),
         which_asymptote::Symbol = :none,
-        which_waveguide::Int = 0) where V<:Number where W<:Number
+        which_waveguide::Int = 0) where Td<:Dict where Ts<:Dict
 
         num_subdomains= 1 + length(is_in_subdomain)
 
         @assert !(which_asymptote==:none && which_waveguide!==0) "assigned waveguide id $(which_waveguide) to non-asymptotic domain"
 
-        return new(is_in_domain, domain_params, domain_type, domain_ε,
-        is_in_subdomain, subdomain_params, subdomain_type, subdomain_ε,
+        return new{Td,Ts}(is_in_domain, domain_params, domain_type, domain_ε, domain_F,
+        is_in_subdomain, subdomain_params, subdomain_type, subdomain_ε, subdomain_F,
         lattice, which_asymptote, which_waveguide, num_subdomains)
     end
 end
@@ -67,26 +73,30 @@ collection of domains that defines System, an input for Simulation.
 
 input can be array or scalar.
 """
-struct System
-    domains::Array{Domain,1}
+struct System{Tdom,Tpar}
+    domains::Array{Tdom,1}
     ε::Array{ComplexF64,2}
+    F::Array{Float64,2}
     Σd::Array{ComplexF64,2}
     Σe::Array{ComplexF64,2}
 
     domain_by_region::Array{Int,1}
-    params_by_region::Array{Dict{Symbol,T},1} where T<:Number
+    params_by_region::Array{Tpar,1}
     ε_by_region::Array{Function,1}
+    F_by_region::Array{Function,1}
 
     regions::Array{Int,2}
     num_prev_regions::Array{Int,1}
 
     waveguides::Array{Int,1}
 
-    function System(domains::Array{Domain,1} = [Domain()],
+    function System(domains::Array{Td,1} = [Domain()],
                     ε::Array{ComplexF64,2} = Array{ComplexF64}(undef, 0, 0),
+                    F::Array{Float64,2} = Array{Float64}(undef, 0, 0),
                     Σd::Array{ComplexF64,2} = Array{ComplexF64}(undef, 0, 0),
                     Σe::Array{ComplexF64,2} = Array{ComplexF64}(undef, 0, 0),
-                    regions::Array{Int,2} = Array{Int}(undef, 0, 0))
+                    regions::Array{Int,2} = Array{Int}(undef, 0, 0)
+                    ) where Td<:Domain
 
         # protect from downstream changes
         domains = deepcopy(domains)
@@ -104,8 +114,9 @@ struct System
         end
 
         domain_by_region = Array{Int}(undef, num_regions)
-        params_by_region = Array{Dict{Symbol,Float64}}(undef, num_regions)
+        params_by_region = Array{typeof(domains[1].domain_params)}(undef, num_regions)
         ε_by_region = Array{Function}(undef, num_regions)
+        F_by_region = Array{Function}(undef, num_regions)
 
         num_prev_regions = Array{Int}(undef, length(domains))
         num_prev_regions[1] = 0
@@ -120,18 +131,20 @@ struct System
                 domain_by_region[idx] = i
                 params_by_region[idx] = d.subdomain_params[j]
                 ε_by_region[idx] = d.subdomain_ε[j]
+                F_by_region[idx] = d.subdomain_F[j]
                 idx += 1
             end
             domain_by_region[idx] = i
             params_by_region[idx] = d.domain_params
             ε_by_region[idx] = d.domain_ε
+            F_by_region[idx] = d.domain_F
             idx += 1
         end
         cumsum!(num_prev_regions, num_prev_regions, dims=1)
 
         waveguides = sort(unique([domains[i].which_waveguide for i ∈ eachindex(domains)]))[2:end]
 
-        return new(domains, ε, Σd, Σe, domain_by_region, params_by_region, ε_by_region, regions, num_prev_regions, waveguides)
+        return new{Td,eltype(params_by_region)}(domains, ε, F, Σd, Σe, domain_by_region, params_by_region, ε_by_region, F_by_region, regions, num_prev_regions, waveguides)
     end
 end
 
@@ -199,28 +212,27 @@ struct Discretization
 end
 
 
-struct Boundary
+struct Boundary{Tbc1,Tbc2}
     ∂Ω::Array{Float64,2}
     ∂Ω_tr::Array{Float64,2}
 
     bc::Array{Symbol,2}
-    BC::Tuple{T,U} where T<:Union{Nothing,BoundaryCondition} where U<:Union{Nothing,BoundaryCondition}
 
     bl::Array{Symbol,2}
     bl_depth::Array{Float64,2}
 
     α::Array{ComplexF64,2}
+    BC::Tuple{Tbc1,Tbc2}
 
     function Boundary(∂Ω::Array{S,2}, bc::Array{Symbol,2}, BC::Tuple{Q,L}, bl::Array{Symbol,2},
                 bl_depth::Array{V,2}) where Q<:BoundaryCondition where L<:BoundaryCondition where S<:Real where V<:Real
         ∂Ω, ∂Ω_tr, bc, bl, bl_depth, α = BoundaryCore(∂Ω, bc, bl, bl_depth)
-        return new(∂Ω, ∂Ω_tr, bc, BC, bl, bl_depth, α)
+        return new{Q,L}(∂Ω, ∂Ω_tr, bc, bl, bl_depth, α, BC)
     end
     function Boundary(∂Ω::Array{S,2}, bc::Array{Symbol,2}, bl::Array{Symbol,2},
-                bl_depth::Array{V,2}) where Q<:BoundaryCondition where L<:BoundaryCondition where S<:Real where V<:Real
-        BC = (nothing, nothing)
+                bl_depth::Array{V,2}) where S<:Real where V<:Real
         ∂Ω, ∂Ω_tr, bc, bl, bl_depth, α = BoundaryCore(∂Ω, bc, bl, bl_depth)
-        return new(∂Ω, ∂Ω_tr, bc, BC, bl, bl_depth, α)
+        return new{BoundaryCondition,BoundaryCondition}(∂Ω, ∂Ω_tr, bc, bl, bl_depth, α)
     end
     function BoundaryCore(∂Ω::Array{S,2}, bc::Array{Symbol,2}, bl::Array{Symbol,2},
         bl_depth::Array{V,2}) where Q<:BoundaryCondition where L<:BoundaryCondition where S<:Real where V<:Real
@@ -355,21 +367,21 @@ See also: [`System`](@ref), [`Boundary`](@ref), [`Discretization`](@ref), [`Scat
 
 simulation object
 """
-struct Simulation
-    sys::System
-    bnd::Boundary
+struct Simulation{Tsys,Tbnd}
+    sys::Tsys
+    bnd::Tbnd
     dis::Discretization
     sct::Scattering
     tls::TwoLevelSystem
     lat::BravaisLattice
 
-    function Simulation(;sys::System=System(),
-        bnd::Boundary,
+    function Simulation(;sys::Ts=System(),
+        bnd::Tb,
         dis::Discretization,
         sct::Scattering=Scattering(),
         tls::TwoLevelSystem=TwoLevelSystem(),
         lat::BravaisLattice=BravaisLattice(bnd),
-        disp_opt=false)
+        disp_opt=false) where Ts<:System where Tb<:Boundary
 
         # shield structures from downstream changes
         sys = deepcopy(sys); bnd = deepcopy(bnd); dis = deepcopy(dis)
@@ -430,10 +442,9 @@ struct Simulation
                 @warn "one-dimensional (horizontal) system, but domain $(i) has finite transverse lattice constant $(sys.domains[i].lattice.b) < ∞"
             end
         end
-
-        ɛ, regions = sub_pixel_smoothing(bnd, dis, sys; disp_opt=disp_opt)
+        ɛ, F, regions = sub_pixel_smoothing(bnd, dis, sys; disp_opt=disp_opt)
         Σd, Σe = σ(dis, bnd)
-        sys = System(sys.domains, ε, Σd, Σe, regions)
+        sys = System(sys.domains, ε, F, Σd, Σe, regions)
 
         for i ∈ 1:length(sct.waveguides_used)
             sct.ɛ₀[i] = Array{ComplexF64}(undef,dis.N[1],dis.N[2])
@@ -449,6 +460,6 @@ struct Simulation
             end
         end
 
-        return new(sys, bnd, dis, sct, tls, lat)
+        return new{Ts,typeof(bnd)}(sys, bnd, dis, sct, tls, lat)
     end
 end

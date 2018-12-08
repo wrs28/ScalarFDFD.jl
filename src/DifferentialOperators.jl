@@ -472,7 +472,7 @@ function laplacian(N::Array{Int}, dx, bcs::Tuple{U, V};
     return ∇₁² + ∇₂², S1+S2
 end
 function laplacian(N::Array{Int}, dx::Real, bcs::Tuple{U, V};
-            ka::Number=0, kb::Number=0, coordinate_system::Symbol=:cart, h=1) where U<:BoundaryCondition where V<:BoundaryCondition
+            ka::Number=0, kb::Number=0, coordinate_system::Symbol=:cart, h=ones(N...)) where U<:BoundaryCondition where V<:BoundaryCondition
     ∇², S = laplacian(N, [dx, dx], bcs; coordinate_system=coordinate_system, h=h, ka=ka, kb=kb)
     return ∇², S
 end # 2d laplacian

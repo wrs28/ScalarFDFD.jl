@@ -2,7 +2,7 @@
 #### RESONANT EIGENVALUE SOLVERS
 ################################################################################
 function HelmholtzEigen.eig_kl(sim::Simulation, k, nk, ka, kb)
-    return eig_kl(sim.dis.N, sim.dis.dx, (1 .+ 1im*sim.sys.Σe/k).*sim.sys.ε, k, sim.bnd.BC;
+    return eig_kl(deepcopy(sim.dis.N), deepcopy(sim.dis.dx), (1 .+ 1im*sim.sys.Σe/k).*sim.sys.ε, k, sim.bnd.BC;
             nk=nk, ka=ka, kb=kb, coordinate_system=sim.dis.coordinate_system,
             h= 1 ./(1 .+ 1im*sim.sys.Σd/k) )
 end
@@ -147,7 +147,7 @@ practice this has very little effect.
 - `η_init` is the anchor CF eigenvalue, solutions are found which are closest to it.
 """
 function HelmholtzEigen.eig_cf(sim::Simulation, k::Number, ncf::Int, η::Number=0, ka::Number=0, kb::Number=0)
-    return eig_cf(sim.dis.N, sim.dis.dx, (1 .+ 1im*sim.sys.Σe/k).*sim.sys.ε, k, sim.bnd.BC;
+    return eig_cf(deepcopy(sim.dis.N), deepcopy(sim.dis.dx), (1 .+ 1im*sim.sys.Σe/k).*sim.sys.ε, (1 .+ 1im*sim.sys.Σe/k).*sim.sys.F, k, sim.bnd.BC;
             η=η, ncf=ncf, ka=ka, kb=kb, coordinate_system=sim.dis.coordinate_system,
             h= 1 ./(1 .+ 1im*sim.sys.Σd/k) )
 end

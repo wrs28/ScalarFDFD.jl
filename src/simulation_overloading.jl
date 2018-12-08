@@ -6,21 +6,24 @@
 
 New domain structure from old with modified fields
 """
-function Domain(dom::Domain;
+function Domain(dom::Td;
     is_in_domain = is_in_domain,
     domain_params = domain_params,
     domain_type = domain_type,
     domain_ε = domain_ε,
+    domain_F = domain_F,
     is_in_subdomain = is_in_subdomain,
     subdomain_params = subdomain_params,
     subdomain_type = subdomain_type,
     subdomain_ε = subdomain_ε,
+    subdomain_F = subdomain_F,
     lattice = lattice,
     which_asymptote = which_asymptote,
-    which_waveguide = which_waveguide)
+    which_waveguide = which_waveguide
+    ) where Td<:Domain
     return Domain(;is_in_domain = is_in_domain, domain_params = domain_params, domain_type = domain_type,
-            domain_ε = domain_ε, is_in_subdomain = is_in_subdomain, subdomain_params = subdomain_params,
-            subdomain_type = subdomain_type, subdomain_ε = subdomain_ε, lattice = lattice,
+            domain_ε = domain_ε, domain_F = domain_F, is_in_subdomain = is_in_subdomain, subdomain_params = subdomain_params,
+            subdomain_type = subdomain_type, subdomain_ε = subdomain_ε, subdomain_F = subdomain_F, lattice = lattice,
             which_asymptote = which_asymptote, which_waveguide = which_waveguide)
 end
 
@@ -31,7 +34,7 @@ end
 """
     sys = System(domain1, domain2, ...)
 """
-function System(args::Vararg{Domain})
+function System(args::Vararg{Td}) where Td<:Domain
     return System(vcat(args...))
 end
 
@@ -41,7 +44,7 @@ end
 
 system object from system object
 """
-function System(sys::System)
+function System(sys::Ts) where Ts<:System
     return System(sys.domains)
 end
 

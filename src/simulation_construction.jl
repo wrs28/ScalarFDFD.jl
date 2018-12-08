@@ -17,8 +17,10 @@ function sub_pixel_smoothing(bnd::Boundary, dis::Discretization, sys::System; di
     r = which_region.(xb, yb, domains, Ref(sys))
 
     ε = Array{ComplexF64}(undef,dis.N[1],dis.N[2])
+    F = Array{Float64}(undef,dis.N[1],dis.N[2])
     for i ∈ CartesianIndices(r)
         ε[i] = sys.ε_by_region[r[i]](x[i[1]],y[i[2]],sys.params_by_region[r[i]])
+        F[i] = sys.F_by_region[r[i]](x[i[1]],y[i[2]],sys.params_by_region[r[i]])
     end
 
     sub_pixel_num = dis.sub_pixel_num
@@ -39,6 +41,7 @@ function sub_pixel_smoothing(bnd::Boundary, dis::Discretization, sys::System; di
                 bravais_coordinates_unit_cell!(xb, yb, sub_x, sub_y, sub_domains, Ref(sys))
                 sub_regions[:] = which_region.(xb, yb, sub_domains, Ref(sys))
                 ɛ[i] = mean(ɛ_by_region[sub_regions])
+                F[i] = mean(F_by_region[sub_regions])
             end
         end
     elseif dis.N[1] == 1
@@ -69,6 +72,7 @@ function sub_pixel_smoothing(bnd::Boundary, dis::Discretization, sys::System; di
         sub_regions = Array{Int}(undef, sub_pixel_num, sub_pixel_num)
         sub_domains = Array{Int}(undef, sub_pixel_num, sub_pixel_num)
         ε_temp = Array{ComplexF64}(undef,sub_pixel_num, sub_pixel_num)
+        F_temp = Array{Float64}(undef,sub_pixel_num, sub_pixel_num)
         if disp_opt
             pg = Progress((size(x,1)-2)*(size(y,2)-2), PROGRESS_UPDATE_TIME::Float64, "sub-pixel smoothing ")
         end
@@ -87,8 +91,10 @@ function sub_pixel_smoothing(bnd::Boundary, dis::Discretization, sys::System; di
                 sub_regions[:] = which_region.(xb, yb, sub_domains, Ref(sys))
                 for i ∈ CartesianIndices(sub_regions)
                     ε_temp[i] = sys.ε_by_region[r[i]](x[i[1]],y[i[2]],sys.params_by_region[r[i]])
+                    F_temp[i] = sys.F_by_region[r[i]](x[i[1]],y[i[2]],sys.params_by_region[r[i]])
                 end
                 ε[i,j] = mean(ε_temp)
+                F[i,j] = mean(F_temp)
             end
             if disp_opt
                 next!(pg)
@@ -96,7 +102,7 @@ function sub_pixel_smoothing(bnd::Boundary, dis::Discretization, sys::System; di
         end
     end
 
-    return ɛ, r
+    return ɛ, F, r
 end
 
 
@@ -231,6 +237,14 @@ function piecewise_constant_ε(x,y,params)
 end
 
 
+"""
+    piecewise_constant_F(x,y,params)
+"""
+function piecewise_constant_F(x,y,params)
+    return float(params[:F])
+end
+
+
 
 ################################################################################################
 ### BOUNDARY LAYERS
@@ -257,13 +271,13 @@ function σ(x::Real,y::Real,bnd::Boundary,side::Symbol)
     end
     pos = (x,y)
     if sign(bnd.∂Ω_tr[i,j] - pos[j])*(-1)^i ≤ 0
-         u = abs(pos[j]-bnd.∂Ω_tr[i,j])/(bnd.bl_depth[i,j] + eps())
-         β = 2*sqrt(bnd.bl_depth[i,j]) + eps()
-         Σ = α[i,j]*u*expm1(β*u)/expm1(β)
-     else
-         Σ = complex(0.)
+        u = abs(pos[j]-bnd.∂Ω_tr[i,j])/(bnd.bl_depth[i,j] + eps())
+        β = 2*sqrt(bnd.bl_depth[i,j]) + eps()
+        Σ = α[i,j]*u*expm1(β*u)/expm1(β)
+    else
+        Σ = complex(0.)
     end
-    return Σ
+    return isnan(Σ) ? complex(0.) : Σ
 end
 function σ(dis::Discretization, bnd::Boundary)
     Σ1 = zeros(ComplexF64,dis.N[1]+1,dis.N[2]+1)
