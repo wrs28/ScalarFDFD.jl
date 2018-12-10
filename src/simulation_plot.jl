@@ -1,5 +1,4 @@
 #TODO: check 1d plots, to waveguixe_dispersion
-#TODO: make things depend on environmental variable COLOR_SCHEME
 
 ################################################################################
 ########## SIMULATION
@@ -8,7 +7,6 @@
     p = plot(sim)
 """
 @recipe function f(sim::Simulation)
-    println("here")
     (sim, ComplexF64[])
 end
 
@@ -24,27 +22,12 @@ to turn off translucent effect, add optional argument `seriesalpha=0`
 vary type of plot with `seriestype`, e.g. `seriestype=:contour`
 """
 @recipe function f(sim::Simulation, ψ::Array; by=nothing, truncate=true)
-println("here")
-    # check whether ψ was originally provided or if just plotting sim
-    if !isempty(ψ)
-        # truncate field unless otherwise specified
-        if truncate
-            idx = sim.dis.X_idx
-        else
-            idx = 1:prod(sim.dis.N)
-        end
-    else
-        idx = Int[]
-    end
-
-    # 1d plot or 2d plot
     if 1 ∈ sim.dis.N
-        (sim, ψ[idx,:], by, 1)
+        (sim, ψ, by, truncate, 1)
     else
-        (sim, ψ[idx,:], by, 2, 2)
+        (sim, ψ, by, truncate, 2, 2)
     end
 end
-
 
 
 # 1d plot
@@ -167,41 +150,18 @@ end
 end
 
 
-
 # 2d plot
-@recipe function f(sim::Simulation, ψ::Array{ComplexF64}, by::Union{Function,Nothing}, dim1::Int, dim2::Int)
+@recipe function f(sim::Simulation, ψ::Array{ComplexF64}, by::Union{Function,Nothing}, truncate::Bool, dim1::Int, dim2::Int)
 
-    # check whether ψ was originally provided or if just plotting sim
-    if isempty(ψ)
-        N=0
-    else
-        N = size(ψ,2)
-    end
+    (N, x_f_start, x_f_stop, x_f, x_t_start, x_t_stop, x_t,
+        y_f_start, y_f_stop, y_f, y_t_start, y_t_stop, y_t,
+        ε, F, ψ_plot, boundary_data, pml_data) = prep_data(sim, ψ, truncate)
 
-    # determine whether ψ was truncated or not and if it's just sim
-    if size(ψ,1) == prod(sim.dis.N) || iszero(N)
-        M = sim.dis.N
-        x, y = sim.dis.x[1][:], sim.dis.x[2][:]
-        ∂Ω = sim.bnd.∂Ω
-        ε, F = sim.sys.ε, sim.sys.F
-    else
-        M = sim.dis.N_tr
-        x, y = sim.dis.x_tr[1][:], sim.dis.x_tr[2][:]
-        ∂Ω = sim.bnd.∂Ω_tr
-        ε = reshape(sim.sys.ε[sim.dis.X_idx],M[1],M[2])
-        F = reshape(sim.sys.F[sim.dis.X_idx],M[1],M[2])
-    end
+    cmapc, cmapk, cmapsim1, cmapsim2, n_mult, F_sign = fix_colormap(COLOR_SCHEME)
 
-    ψ_plot = Array{ComplexF64}(undef, M[1], M[2], N)
-    for i in 1:N
-        ψ_plot[:,:,i] = reshape(ψ[:,i], M[1], M[2])
-    end
-
-    cmapc, cmapk, cmapsim1, cmapsim2, n_mult, F_sign = fix_colormap(:default)
-
-    aspect_ratio :=1
-    xlim := [∂Ω[1],∂Ω[2]]
-    ylim := [∂Ω[3],∂Ω[4]]
+    aspect_ratio --> 1
+    xlims --> [x_t_start,x_t_stop]
+    ylims --> [y_t_start,y_t_stop]
     colorbar --> false
     overwrite_figure --> false
     levels --> 15
@@ -211,86 +171,68 @@ end
 
     if by==nothing || iszero(N)
 
-        # construct size
-        tmp = [3,(1+N)*(∂Ω[2,2]-∂Ω[1,2])/(∂Ω[2,1]-∂Ω[1,1])]
-        max_ind = findmax(tmp)[2]
-        if max_ind==2
-            b = 850
-            a = b*tmp[1]/tmp[2]
-        else
-            a = 1400
-            b = a*tmp[2]/tmp[1]
-        end
-        size --> (a,b)
         layout --> (1+N,3)
 
         # plot simulation
+        titles = ["real", "imag", "F/abs²"]
         @series begin
-            title := "real"
-            seriestype := :heatmap
             subplot := 1
+            title := titles[1]
             color := cmapsim1
+            seriestype := :heatmap
             n₁ = real(sqrt.(ɛ-1im*sim.tls.D₀*F))
             clims := (minimum(n₁), n_mult*maximum(n₁))
-            x, y, permutedims(n₁)
+            y_f, x_f, permutedims(n₁)
         end
         @series begin
-            title := "imag"
-            seriestype := :heatmap
             subplot := 2
+            title := titles[2]
             color := cmapsim2
-            n₂ = -F_sign*imag(sqrt.(ɛ-1im*sim.tls.D₀*F))
+            seriestype := :heatmap
+            n₂ = imag(sqrt.(ɛ-1im*sim.tls.D₀*F))
             clims := (-maximum(abs.(n₂)), maximum(abs.(n₂)))
-            x, y, permutedims(n₂)
+            x_f, y_f, permutedims(n₂)
         end
         @series begin
-            title := "F/abs²"
-            seriestype := :heatmap
             subplot := 3
+            title := titles[3]
             color := cmapsim2
             clims := (-maximum(abs.(F)), maximum(abs.(F)))
-            x, y, permutedims(F_sign*F)
+            seriestype := :heatmap
+            x_f, y_f, permutedims(F)
         end
         for j ∈ 1:3
-            for i ∈ CartesianIndices(sim.bnd.bc)
-                if sim.bnd.bc[i] == :d
+            for i ∈ eachindex(sim.bnd.bc)
+                if isDirichlet(sim.bnd.bc[i])
                     linestyle := :solid
-                elseif sim.bnd.bc[i] == :n
-                    linestype := :dash
+                elseif isNeumann(sim.bnd.bc[i])
+                    linestyle := :dash
                 end
-                if i[2]==1
-                    data = ([sim.bnd.∂Ω[i], sim.bnd.∂Ω[i]], [sim.bnd.∂Ω[1,2], sim.bnd.∂Ω[2,2]])
-                else
-                    data = ([sim.bnd.∂Ω[1,1], sim.bnd.∂Ω[2,1]], [sim.bnd.∂Ω[i], sim.bnd.∂Ω[i]])
-                end
-                if sim.bnd.bl[i] !== :none
-                    if sim.bnd.bl[i] ∈ [:pml_out, :abs_out]
+                if !isNone(sim.bnd.bl[i])
+                    if isPMLout(sim.bnd.bl[i])
                         fill_color = :red
-                    elseif sim.bnd.bl[i] ∈ [:pml_in, :abs_in]
+                    elseif isPMLin(sim.bnd.bl[i])
                         fill_color = :blue
                     end
-                    if i[2] == 1
-                        datax = [ sim.bnd.∂Ω[i[1],1], sim.bnd.∂Ω_tr[i[1],1], sim.bnd.∂Ω_tr[i[1],1], sim.bnd.∂Ω[i[1],1], sim.bnd.∂Ω[i[1],1] ]
-                        datay = [ sim.bnd.∂Ω[1,2], sim.bnd.∂Ω[1,2],    sim.bnd.∂Ω[2,2],    sim.bnd.∂Ω[2,2], sim.bnd.∂Ω[1,2] ]
-                    else
-                        datax = [ sim.bnd.∂Ω[1,1], sim.bnd.∂Ω[1,1], sim.bnd.∂Ω[2,1], sim.bnd.∂Ω[2,1], sim.bnd.∂Ω[1,1] ]
-                        datay = [ sim.bnd.∂Ω[i[1],2], sim.bnd.∂Ω_tr[i[1],2], sim.bnd.∂Ω_tr[i[1],2], sim.bnd.∂Ω[i[1],2], sim.bnd.∂Ω[i[1],2] ]
-                    end
                     @series begin
-                        seriestype := :path
                         subplot := j
+                        title := titles[j]
                         lw := 0
-                        fill := (0,.15,fill_color)
-                        (datax, datay)
+                        seriestype := :path
+                        color := fill_color
+                        alpha := .15
+                        fill --> (0,.15,fill_color)
+                        pml_data[i]
                     end
                 end
-                if sim.bnd.bc[i] ∈ [:d, :n]
+                if isDirichlet(sim.bnd.bc[i]) | isNeumann(sim.bnd.bc[i])
                     @series begin
-                        seriestype := :line
-                        color := :black
                         subplot := j
+                        title := titles[j]
                         lw := 2
-                        data
+                        color := :black
+                        seriestype := :path
+                        boundary_data[i]
                     end
                 end
             end
@@ -302,19 +244,19 @@ end
                 subplot := 3i+1
                 clims --> (-maximum(abs.(ψ)), maximum(abs.(ψ)))
                 color := cmapc
-                x, y, permutedims(real(ψ))
+                x_t, y_t, permutedims(real(ψ))
             end
             @series begin
                 subplot := 3i+2
                 clims --> (-maximum(abs.(ψ)), maximum(abs.(ψ)))
                 color := cmapc
-                x, y, permutedims(imag(ψ))
+                x_t, y_t, permutedims(imag(ψ))
             end
             @series begin
                 subplot := 3i+3
                 clims --> (0,maximum(abs2.(ψ)))
                 color := cmapk
-                x, y, permutedims(abs2.(ψ))
+                x_t, y_t, permutedims(abs2.(ψ))
             end
         end
     else
@@ -339,16 +281,6 @@ end
             N_row = ceil(Int,N/3)
         end
         layout --> (N_row,N_col)
-        tmp = 250*[N_col,(N_row)*(∂Ω[2,2]-∂Ω[1,2])/(∂Ω[2,1]-∂Ω[1,1])]
-        max_ind = findmax(tmp)[2]
-        if max_ind==2
-            b = 850
-            a = b*tmp[1]/tmp[2]
-        else
-            a = 1400
-            b = a*tmp[2]/tmp[1]
-        end
-        size --> (a,b)
         for i ∈ 1:N
             ψ = ψ_plot[:,:,i]
             n₁ = real(sqrt.(ɛ-1im*sim.tls.D₀*F))
@@ -366,7 +298,7 @@ end
                     n₁ = n₁ .- maximum(abs.(ψ))
                     color := cmapsim1
                 end
-                x, y, permutedims(n₁)
+                x_f, y_f, permutedims(n₁)
             end
             @series begin
                 subplot := i
@@ -377,14 +309,265 @@ end
                 else
                     clims --> (-maximum(abs.(ψ)),+maximum(abs.(ψ)))
                 end
-                x, y, permutedims(by.(ψ))
+                x_t, y_t, permutedims(by.(ψ))
             end
         end
     end
 end
 
 
+function apply_truncation(sim::Simulation, ψ, truncate::Bool)
+    if isempty(ψ)
+        N=0
+    else
+        N = size(ψ,2)
+    end
+    if !isempty(ψ)
+        idx = truncate ? sim.dis.X_idx : 1:prod(sim.dis.N)
+    else
+        idx = Int[]
+    end
+    if !truncate || iszero(N)
+        M = sim.dis.N
+        X, Y = sim.dis.X, sim.dis.Y
+        x, y = sim.dis.x[1], sim.dis.x[2]
+        ∂Ω = sim.bnd.∂Ω
+    else
+        M = sim.dis.N_tr
+        X = reshape(sim.dis.X[sim.dis.X_idx],M[1],M[2])
+        Y = reshape(sim.dis.Y[sim.dis.X_idx],M[1],M[2])
+        x, y = sim.dis.x_tr[1], sim.dis.x_tr[2]
+        ∂Ω = sim.bnd.∂Ω_tr
+        ψ = ψ[idx,:]
+    end
+    return N, M, X, Y, x, y, ∂Ω, ψ
+end
 
+
+function prep_data(sim::Simulation{Tsys,Tbnd,Discretization{Cartesian}}, ψ, truncate::Bool) where Tsys<:System where Tbnd<:Boundary
+
+    N, M, X, Y, x_t, y_t, ∂Ω, ψ = apply_truncation(sim, ψ, truncate)
+
+    x_f_start = sim.bnd.∂Ω[1,1]
+    x_f_stop  = sim.bnd.∂Ω[2,1]
+    x_f = sim.dis.x[1][:]
+
+    y_f_start = sim.bnd.∂Ω[1,2]
+    y_f_stop  = sim.bnd.∂Ω[2,2]
+    y_f = sim.dis.x[2][:]
+
+    x_t_start = ∂Ω[1,1]
+    x_t_stop  = ∂Ω[2,1]
+
+    y_t_start = ∂Ω[1,2]
+    y_t_stop  = ∂Ω[2,2]
+
+    ε = sim.sys.ε
+    F = sim.sys.F
+
+    ψ_plot = Array{ComplexF64}(undef, M[1], M[2], N)
+    for i in 1:N
+        ψ_plot[:,:,i] = reshape(ψ[:,i], M[1], M[2])
+    end
+
+    boundary_data1_f = ([x_f[1],x_f[1]],[y_f[1],y_f[end]])
+    boundary_data2_f = ([x_f[end],x_f[end]],[y_f[1],y_f[end]])
+    boundary_data3_f = ([x_f[1],x_f[end]],[y_f[1],y_f[1]])
+    boundary_data4_f = ([x_f[1],x_f[end]],[y_f[end],y_f[end]])
+
+    N_pml = 2
+    pml_x_1 = vcat(
+                LinRange(sim.dis.x[1][1], sim.dis.x_tr[1][1], N_pml),
+                fill(sim.dis.x_tr[1][1], N_pml),
+                LinRange(sim.dis.x_tr[1][1], sim.dis.x[1][1], N_pml),
+                fill(sim.dis.x[1][1],N_pml)
+                )
+    pml_y_1 = vcat(
+                fill(sim.dis.x[2][1],N_pml),
+                LinRange(sim.dis.x[2][1], sim.dis.x[2][end], N_pml),
+                fill(sim.dis.x[2][end],N_pml),
+                LinRange(sim.dis.x[2][end], sim.dis.x[2][1], N_pml)
+                )
+
+    pml_x_2 = vcat(
+                LinRange(sim.dis.x_tr[1][end], sim.dis.x[1][end], N_pml),
+                fill(sim.dis.x[1][end], N_pml),
+                LinRange(sim.dis.x[1][end], sim.dis.x_tr[1][end], N_pml),
+                fill(sim.dis.x_tr[1][end],N_pml)
+                )
+    pml_y_2 = vcat(
+                fill(sim.dis.x[2][1],N_pml),
+                LinRange(sim.dis.x[2][1], sim.dis.x[2][end], N_pml),
+                fill(sim.dis.x[2][end],N_pml),
+                LinRange(sim.dis.x[2][end], sim.dis.x[2][1], N_pml)
+                )
+
+    pml_x_3 = vcat(
+                LinRange(sim.dis.x[1][1], sim.dis.x[1][end], N_pml),
+                fill(sim.dis.x[1][end], N_pml),
+                LinRange(sim.dis.x[1][end], sim.dis.x[1][1], N_pml),
+                fill(sim.dis.x[1][1],N_pml)
+                )
+    pml_y_3 = vcat(
+                fill(sim.dis.x[2][1],N_pml),
+                LinRange(sim.dis.x[2][1], sim.dis.x_tr[2][1], N_pml),
+                fill(sim.dis.x_tr[2][1],N_pml),
+                LinRange(sim.dis.x_tr[2][1], sim.dis.x[2][1], N_pml)
+                )
+
+    pml_x_4 = vcat(
+                LinRange(sim.dis.x[1][1], sim.dis.x[1][end], N_pml),
+                fill(sim.dis.x[1][end], N_pml),
+                LinRange(sim.dis.x[1][end], sim.dis.x[1][1], N_pml),
+                fill(sim.dis.x[1][1],N_pml)
+                )
+    pml_y_4 = vcat(
+                fill(sim.dis.x_tr[2][end],N_pml),
+                LinRange(sim.dis.x_tr[2][end], sim.dis.x[2][end], N_pml),
+                fill(sim.dis.x[2][end],N_pml),
+                LinRange(sim.dis.x[2][end], sim.dis.x_tr[2][end], N_pml)
+                )
+
+    pml_data1 = (pml_x_1,pml_y_1)
+    pml_data2 = (pml_x_2,pml_y_2)
+    pml_data3 = (pml_x_3,pml_y_3)
+    pml_data4 = (pml_x_4,pml_y_4)
+
+    return (N, x_f_start, x_f_stop, x_f, x_t_start, x_t_stop, x_t[:],
+        y_f_start, y_f_stop, y_f, y_t_start, y_t_stop, y_t[:],
+        ε, F, ψ_plot,
+        (boundary_data1_f, boundary_data2_f, boundary_data3_f, boundary_data4_f),
+        (pml_data1, pml_data2, pml_data3, pml_data4) )
+end
+
+
+function prep_data(sim::Simulation{Tsys,Tbnd,Discretization{Polar}}, ψ, truncate::Bool) where Tsys<:System where Tbnd<:Boundary
+
+    r_f = sim.dis.x[1][1] .+ sim.dis.dx[1]*(-1:sim.dis.N[1])
+    θ_f = sim.dis.x[2][1] .+ sim.dis.dx[2]*(-1:sim.dis.N[2])
+
+    x_f_start = minimum(sim.dis.X)-sim.dis.dx[1]/2
+    x_f_stop  = maximum(sim.dis.X)+sim.dis.dx[1]/2
+    x_f = LinRange(x_f_start, x_f_stop, 2sim.dis.N[1])
+
+    y_f_start = minimum(sim.dis.Y)-sim.dis.dx[1]/2
+    y_f_stop  = maximum(sim.dis.Y)+sim.dis.dx[1]/2
+    y_f = LinRange(y_f_start, y_f_stop, 2sim.dis.N[1])
+
+    ε_temp = Array{ComplexF64}(undef, sim.dis.N[1]+2, sim.dis.N[2]+2)
+    ε_temp[2:end-1,2:end-1] = sim.sys.ε
+    @views ε_temp[:,1] = ε_temp[:,end-1]
+    @views ε_temp[:,end] = ε_temp[:,2]
+    @views ε_temp[1,:] = ε_temp[2,:]
+    @views ε_temp[end,:] = ε_temp[end-1,:]
+    ε_itp = extrapolate(scale(interpolate(ε_temp,BSpline(Cubic(Periodic(OnGrid())))),r_f,θ_f),complex(NaN,NaN))
+    ε = @. ε_itp(hypot(x_f,y_f'),sim.dis.x[2][1]+mod(atan(y_f',x_f)-sim.dis.x[2][1],2π))
+
+    F_temp = Array{Float64}(undef, sim.dis.N[1]+2, sim.dis.N[2]+2)
+    F_temp[2:end-1,2:end-1] = sim.sys.F
+    @views F_temp[:,1] = F_temp[:,end-1]
+    @views F_temp[:,end] = F_temp[:,2]
+    @views F_temp[1,:] = F_temp[2,:]
+    @views F_temp[end,:] = F_temp[end-1,:]
+    F_itp = extrapolate(scale(interpolate(F_temp,BSpline(Cubic(Periodic(OnGrid())))),r_f,θ_f),NaN)
+    F = @. F_itp(hypot(x_f,y_f'),sim.dis.x[2][1]+mod(atan(y_f',x_f)-sim.dis.x[2][1],2π))
+
+
+    N, M, X, Y, x_t, y_t, ∂Ω, ψ = apply_truncation(sim, ψ, truncate)
+
+    r_t = x_t[1] .+ sim.dis.dx[1]*(-1:M[1])
+    θ_t = y_t[1] .+ sim.dis.dx[2]*(-1:M[2])
+
+    x_t_start = minimum(X)-sim.dis.dx[1]/2
+    x_t_stop  = maximum(X)+sim.dis.dx[1]/2
+    x_t = LinRange(x_t_start, x_t_stop, 2M[1])
+
+    y_t_start = minimum(Y)-sim.dis.dx[1]/2
+    y_t_stop  = maximum(Y)+sim.dis.dx[1]/2
+    y_t = LinRange(y_t_start, y_t_stop, 2M[1])
+
+    root_r = sqrt.(hypot.(X,Y))
+    ψ_temp = Array{ComplexF64}(undef, M[1]+2, M[2]+2)
+    ψ_plot = Array{ComplexF64}(undef, 2M[1], 2M[1], N)
+    for i ∈ 1:N
+        @views ψ_temp[2:end-1,2:end-1] = reshape(ψ[:,i], M[1], M[2])./root_r
+        @views ψ_temp[:,1] = ψ_temp[:,end-1]
+        @views ψ_temp[:,end] = ψ_temp[:,2]
+        @views ψ_temp[1,:] = ψ_temp[2,:]
+        @views ψ_temp[end,:] = ψ_temp[end-1,:]
+        ψ_itp = extrapolate(scale(interpolate(ψ_temp,BSpline(Cubic(Periodic(OnGrid())))),r_t,θ_t),complex(NaN,NaN))
+        ψ_plot[:,:,i] = @. ψ_itp(hypot(x_t,y_t'),sim.dis.x[2][1]+mod(atan(y_t',x_t)-sim.dis.x[2][1],2π))
+    end
+
+    boundary_data1_f = (r_f[1]*cos.(θ_f),r_f[1]*sin.(θ_f))
+    boundary_data2_f = (r_f[end]*cos.(θ_f),r_f[end]*sin.(θ_f))
+    boundary_data3_f = (r_f*cos(θ_f[1]),r_f*sin(θ_f[1]))
+    boundary_data4_f = (r_f*cos(θ_f[end]),r_f*sin(θ_f[end]))
+
+    N_pml = 101
+    pml_r_1 = vcat(
+                LinRange(sim.dis.x[1][1], sim.dis.x_tr[1][1], N_pml),
+                fill(sim.dis.x_tr[1][1], N_pml),
+                LinRange(sim.dis.x_tr[1][1], sim.dis.x[1][1], N_pml),
+                fill(sim.dis.x[1][1],N_pml)
+                )
+    pml_θ_1 = vcat(
+                fill(sim.dis.x[2][1],N_pml),
+                LinRange(sim.dis.x[2][1], sim.dis.x[2][end], N_pml),
+                fill(sim.dis.x[2][end],N_pml),
+                LinRange(sim.dis.x[2][end], sim.dis.x[2][1], N_pml)
+                )
+
+    pml_r_2 = vcat(
+                LinRange(sim.dis.x_tr[1][end], sim.dis.x[1][end], N_pml),
+                fill(sim.dis.x[1][end], N_pml),
+                LinRange(sim.dis.x[1][end], sim.dis.x_tr[1][end], N_pml),
+                fill(sim.dis.x_tr[1][end],N_pml)
+                )
+    pml_θ_2 = vcat(
+                fill(sim.dis.x[2][1],N_pml),
+                LinRange(sim.dis.x[2][1], sim.dis.x[2][end], N_pml),
+                fill(sim.dis.x[2][end],N_pml),
+                LinRange(sim.dis.x[2][end], sim.dis.x[2][1], N_pml)
+                )
+
+    pml_r_3 = vcat(
+                LinRange(sim.dis.x[1][1], sim.dis.x[1][end], N_pml),
+                fill(sim.dis.x[1][end], N_pml),
+                LinRange(sim.dis.x[1][end], sim.dis.x[1][1], N_pml),
+                fill(sim.dis.x[1][1],N_pml)
+                )
+    pml_θ_3 = vcat(
+                fill(sim.dis.x[2][1],N_pml),
+                LinRange(sim.dis.x[2][1], sim.dis.x_tr[2][1], N_pml),
+                fill(sim.dis.x_tr[2][1],N_pml),
+                LinRange(sim.dis.x_tr[2][1], sim.dis.x[2][1], N_pml)
+                )
+
+    pml_r_4 = vcat(
+                LinRange(sim.dis.x[1][1], sim.dis.x[1][end], N_pml),
+                fill(sim.dis.x[1][end], N_pml),
+                LinRange(sim.dis.x[1][end], sim.dis.x[1][1], N_pml),
+                fill(sim.dis.x[1][1],N_pml)
+                )
+    pml_θ_4 = vcat(
+                fill(sim.dis.x_tr[2][end],N_pml),
+                LinRange(sim.dis.x_tr[2][end], sim.dis.x[2][end], N_pml),
+                fill(sim.dis.x[2][end],N_pml),
+                LinRange(sim.dis.x[2][end], sim.dis.x_tr[2][end], N_pml)
+                )
+
+    pml_data1 = (pml_r_1.*cos.(pml_θ_1),pml_r_1.*sin.(pml_θ_1))
+    pml_data2 = (pml_r_2.*cos.(pml_θ_2),pml_r_2.*sin.(pml_θ_2))
+    pml_data3 = (pml_r_3.*cos.(pml_θ_3),pml_r_3.*sin.(pml_θ_3))
+    pml_data4 = (pml_r_4.*cos.(pml_θ_4),pml_r_4.*sin.(pml_θ_4))
+
+    return (N, x_f_start, x_f_stop, x_f, x_t_start, x_t_stop, x_t,
+        y_f_start, y_f_stop, y_f, y_t_start, y_t_stop, y_t,
+        ε, F, ψ_plot,
+        (boundary_data1_f, boundary_data2_f, boundary_data3_f, boundary_data4_f),
+        (pml_data1, pml_data2, pml_data3, pml_data4) )
+end
 
 
 ################################################################################
