@@ -4,6 +4,7 @@ using Bravais,
 DifferentialOperators,
 Formatting,
 Interpolations,
+IterTools,
 RecipesBase
 
 
@@ -27,6 +28,7 @@ include("bravais_overloading.jl")
 include("iss.jl")
 
 include("simulation_pretty_printing.jl")
+include("simulation_plot_defaults.jl")
 include("simulation_plot.jl")
 
 end # module
