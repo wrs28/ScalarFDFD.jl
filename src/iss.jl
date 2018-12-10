@@ -67,7 +67,7 @@ end
     isNeumann(bc)
 """
 function isNeumann(bc::Symbol)
-    validNames = [:d, :D, :dirichlet, :Dirichlet, :hard, :h]
+    validNames = [:n, :N, :neumann, :Neumann, :soft, :s]
     return bc ∈ validNames
 end
 
