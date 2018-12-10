@@ -25,9 +25,9 @@ function eig_kl(N::Array{Int,1},
                 nk::Int=1,
                 ka::Number=0,
                 kb::Number=0,
-                coordinate_system::Symbol=:cart,
+                coordinate_system::Tcs=Cartesian(),
                 h::Array{Th,2}=ones(size(ρ,1)+1, size(ρ,2)+1)
-                ) where Tρ<:Number where Tbc1<:BoundaryCondition where Tbc2<:BoundaryCondition where Th<:Number
+                ) where Tρ<:Number where Tbc1<:BoundaryCondition where Tbc2<:BoundaryCondition where Th<:Number where Tcs<:CoordinateSystem
 
     ∇², S = laplacian(N, dx, bcs; ka=ka, kb=kb, coordinate_system=coordinate_system, h=h)
     decomp, history = partialschur(shift_and_invert(∇², spdiagm(0=>-ρ[:]), k^2, diag_inv_B=true), nev=nk)

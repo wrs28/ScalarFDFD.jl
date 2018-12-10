@@ -149,9 +149,9 @@ struct System{Tdom,Tpar}
 end
 
 
-struct Discretization
+struct Discretization{Tcs}
     dx::Array{Float64,1}
-    coordinate_system::Symbol
+    coordinate_system::Tcs
     sub_pixel_num::Int
     origin::Array{Float64,1}
 
@@ -168,7 +168,7 @@ struct Discretization
 
     X_idx::Array{Int,1}
 
-    function Discretization(dx, coordinate_system, sub_pixel_num, origin, N, dN)
+    function Discretization(dx::Array, coordinate_system::T, sub_pixel_num, origin, N, dN) where T<:CoordinateSystem
 
         dx = deepcopy(dx)
         sub_pixel_num=deepcopy(sub_pixel_num)
@@ -196,17 +196,19 @@ struct Discretization
             end
         end
 
-        @assert (isCartesian(coordinate_system) | isPolar(coordinate_system)) "unrecognized coordinate system $coordinate_system"
+        @assert (isCartesian(coordinate_system) | isPolar(coordinate_system)) "unrecognized coordinate system type $coordinate_system"
         if isCartesian(coordinate_system)
             X, Y = broadcast((x,y)->x,x[1],x[2]), broadcast((x,y)->y,x[1],x[2])
+            CS = Cartesian()
         else
             X = x[1].*cos.(x[2])
             Y = x[1].*sin.(x[2])
+            CS = Polar()
         end
 
         X_idx = LinearIndices(Array{Bool}(undef, N...))[x_idx...][:]
 
-        return new(float.(dx), coordinate_system, sub_pixel_num, float.(origin), N_tr, N, dN,
+        return new{typeof(CS)}(float.(dx), CS, sub_pixel_num, float.(origin), N_tr, N, dN,
             x, x_tr, x_idx, X, Y, X_idx)
     end
 end
@@ -367,21 +369,21 @@ See also: [`System`](@ref), [`Boundary`](@ref), [`Discretization`](@ref), [`Scat
 
 simulation object
 """
-struct Simulation{Tsys,Tbnd}
+struct Simulation{Tsys,Tbnd,Tdis}
     sys::Tsys
     bnd::Tbnd
-    dis::Discretization
+    dis::Tdis
     sct::Scattering
     tls::TwoLevelSystem
     lat::BravaisLattice
 
     function Simulation(;sys::Ts=System(),
         bnd::Tb,
-        dis::Discretization,
+        dis::Tdis,
         sct::Scattering=Scattering(),
         tls::TwoLevelSystem=TwoLevelSystem(),
         lat::BravaisLattice=BravaisLattice(bnd),
-        disp_opt=false) where Ts<:System where Tb<:Boundary
+        disp_opt=false) where Ts<:System where Tb<:Boundary where Tdis<:Discretization
 
         # shield structures from downstream changes
         sys = deepcopy(sys); bnd = deepcopy(bnd); dis = deepcopy(dis)
@@ -412,7 +414,7 @@ struct Simulation{Tsys,Tbnd}
             bnd.bc[:,index1] .= :d
         else
             dx[index1] = L[index1]/N[index1]
-            dx[index2] = L[index2]/round(Int,L[index2]/dx[index1])
+            dx[index2] = L[index2]/round(Int,L[index2]/dx[index2])
             N = round.(Int,L./dx)
             for i ∈ 1:2
                 dN[:,i] = floor.(Int, bnd.bl_depth[:,i]/dx[i])
@@ -460,6 +462,6 @@ struct Simulation{Tsys,Tbnd}
             end
         end
 
-        return new{Ts,typeof(bnd)}(sys, bnd, dis, sct, tls, lat)
+        return new{Ts,typeof(bnd), Tdis}(sys, bnd, dis, sct, tls, lat)
     end
 end

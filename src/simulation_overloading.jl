@@ -61,10 +61,10 @@ discretization object for Simulation
 
 `sub_pixel_num` is the subsampling rate used in sub-pixel smoothing.
 """
-function Discretization(dx::Real, coordinate_system::Symbol=:cart, sub_pixel_num=DEFAULT_SUBSAMPLE_NUMBER, origin=[0.,0.], N=[1,1], dN=[0 0;0 0])
+function Discretization(dx::Real, coordinate_system::T=Cartesian(), sub_pixel_num::Int=DEFAULT_SUBSAMPLE_NUMBER, origin=[0.,0.], N=[1,1], dN=[0 0;0 0]) where T<:CoordinateSystem
     return Discretization([dx,dx], coordinate_system, sub_pixel_num, origin, N, dN)
 end
-function Discretization(dx::Array, coordinate_system::Symbol=:cart, sub_pixel_num::Int=DEFAULT_SUBSAMPLE_NUMBER)
+function Discretization(dx::Array, coordinate_system::T=Cartesian(), sub_pixel_num::Int=DEFAULT_SUBSAMPLE_NUMBER) where T<:CoordinateSystem
     origin=[0.,0.]; N=[1,1]; dN=[0 0;0 0]
     return Discretization(dx, coordinate_system, sub_pixel_num, origin, N, dN)
 end
@@ -253,4 +253,26 @@ new simulation object from old, with modified fields.
 function Simulation(sim::Simulation; sys=sim.sys, bnd=sim.bnd, dis=sim.dis, sct=sim.sct, tls=sim.tls, lat=sim.lat, disp_opt=false)
     return deepcopy(Simulation(sys=System(sys), bnd=Boundary(bnd), dis=Discretization(dis),
             sct=Scattering(sct), tls=TwoLevelSystem(tls), lat=BravaisLattice(lat), disp_opt=disp_opt))
+end
+
+
+"""
+    isCartesian(sim)
+"""
+function DifferentialOperators.isCartesian(sim::Simulation)
+    return isCartesian(sim.dis)
+end
+function DifferentialOperators.isCartesian(sim::Discretization)
+    return isCartesian(dis.coordinate_system)
+end
+
+
+"""
+    isPolar(sim)
+"""
+function DifferentialOperators.isPolar(sim::Simulation)
+    return isPolar(sim.dis)
+end
+function DifferentialOperators.isPolar(dis::Discretization)
+    return isPolar(dis.coordinate_system)
 end
