@@ -23,6 +23,9 @@ export BoundaryCondition,
 RobinBoundaryCondition,
 PeriodicBoundaryCondition,
 ezbc,
+CoordinateSystem,
+Cartesian,
+Polar,
 gradient,
 laplacian,
 isPolar,
@@ -337,6 +340,14 @@ end
 
 
 ################################################################################
+####### COORDINATE TYPES
+################################################################################
+abstract type CoordinateSystem end
+struct Polar<:CoordinateSystem end
+struct Cartesian<:CoordinateSystem end
+
+
+################################################################################
 ####### GRADIENTS
 ################################################################################
 """
@@ -350,7 +361,7 @@ end
 
 See also: [`ezbc`](@ref), [`laplacian`](@ref)
 """
-function grad(N::Int, dx::Real, bc::T; polarity::Symbol=:central, ka::Number=0, kb::Number=0, coordinate_system::Symbol=:cart) where T<:BoundaryCondition
+function grad(N::Int, dx::Real, bc::T; polarity::Symbol=:central, ka::Number=0, kb::Number=0, coordinate_system::U=Cartesian()) where T<:BoundaryCondition where U<:CoordinateSystem
     ∇ = grad_sans_bc(N, dx, polarity, coordinate_system)
     ∇, S = grad_apply_bc(∇, [N,1], dx[1], bc, 1, polarity, ka, kb, coordinate_system)
     return ∇, S
@@ -365,7 +376,7 @@ end # 1d grad
 See also: [`ezbc`](@ref), [`laplacian`](@ref)
 """
 function grad(N::Array{Int}, dx::Array{T}, bcs::Tuple{U,V};
-                polarity::Symbol=:central, ka::Number=0, kb::Number=0, coordinate_system::Symbol=:cart) where T<:Real where U<:BoundaryCondition where V<:BoundaryCondition
+                polarity::Symbol=:central, ka::Number=0, kb::Number=0, coordinate_system::W=Cartesian()) where T<:Real where U<:BoundaryCondition where V<:BoundaryCondition where W<:CoordinateSystem
 
     ∇1 = grad_sans_bc(N[1], dx[1], polarity, coordinate_system)
     ∇2 = grad_sans_bc(N[2], dx[2], polarity, coordinate_system)
@@ -390,7 +401,7 @@ end # 2d grad
 """
     grad_sans_bc(N, dx, polarity, coordinate_system)
 """
-function grad_sans_bc(N::Int, dx::Real, polarity::Symbol, coordinate_system::Symbol)
+function grad_sans_bc(N::Int, dx::Real, polarity::Symbol, coordinate_system::T) where T<:CoordinateSystem
     if isCentral(polarity)
         dx = 2dx
         I₁, J₁ = Array(2:N), Array(1:N-1)
@@ -416,7 +427,7 @@ end # grad_sans_bc
 """
     grad_apply_bc(∇, N, dx, bc, dim, polarity, ka, kb, coordinate_system)
 """
-function grad_apply_bc(∇, N, dx, bc, dim::Int, polarity::Symbol, ka::Number, kb::Number, coordinate_system::Symbol)
+function grad_apply_bc(∇, N, dx, bc, dim::Int, polarity::Symbol, ka::Number, kb::Number, coordinate_system::T) where T<:CoordinateSystem
     return apply_bc(∇, :gradient, N, dx, bc, dim, 1, polarity, ka, kb, coordinate_system)
 end # grad_apply_bc
 
@@ -436,8 +447,8 @@ Compute ∇⋅(`h`∇) on a 1-dim lattice with `N` sites, spacing `dx`, subject 
 See also: [`ezbc`](@ref), [`grad`](@ref)
 """
 function laplacian(N::Int, dx, bc::BoundaryCondition; ka::Number=0, kb::Number=0, h=1)
-    ∇² = laplacian_sans_bc(N[1], dx[1], h, :cart)
-    ∇², S = laplacian_apply_bc(∇², [N[1],1], dx[1], bc, 1, h, ka, kb, :cart)
+    ∇² = laplacian_sans_bc(N[1], dx[1], h, Cartesian())
+    ∇², S = laplacian_apply_bc(∇², [N[1],1], dx[1], bc, 1, h, ka, kb, Cartesian())
     return ∇², S
 end # 1d laplacian
 
@@ -454,10 +465,10 @@ Compute ∇⋅(`h`∇) on a 2-dim lattice with `N[1]`×`N[2]` sites, spacings `d
 See also: [`ezbc`](@ref), [`grad`](@ref)
 """
 function laplacian(N::Array{Int}, dx, bcs::Tuple{U, V};
-            ka::Number=0, kb::Number=0, coordinate_system::Symbol=:cart, h=ones(N...)) where U<:BoundaryCondition where V<:BoundaryCondition
+            ka::Number=0, kb::Number=0, coordinate_system::W=Cartesian(), h=ones(N...)) where U<:BoundaryCondition where V<:BoundaryCondition where W<:CoordinateSystem
 
     ∇1² = laplacian_sans_bc(N[1], dx[1], h[:,1], coordinate_system)
-    ∇2² = laplacian_sans_bc(N[2], dx[2], h[1,:], :cart)
+    ∇2² = laplacian_sans_bc(N[2], dx[2], h[1,:], Cartesian())
     𝕀1, 𝕀2 = sparse(I, N[1], N[1]), sparse(I, N[2], N[2])
     ∇₁², ∇₂² = 𝕀2 ⊗ ∇1², ∇2² ⊗ 𝕀1
 
@@ -472,7 +483,7 @@ function laplacian(N::Array{Int}, dx, bcs::Tuple{U, V};
     return ∇₁² + ∇₂², S1+S2
 end
 function laplacian(N::Array{Int}, dx::Real, bcs::Tuple{U, V};
-            ka::Number=0, kb::Number=0, coordinate_system::Symbol=:cart, h=ones(N...)) where U<:BoundaryCondition where V<:BoundaryCondition
+            ka::Number=0, kb::Number=0, coordinate_system::W=Cartesian(), h=ones(N...)) where U<:BoundaryCondition where V<:BoundaryCondition where W<:CoordinateSystem
     ∇², S = laplacian(N, [dx, dx], bcs; coordinate_system=coordinate_system, h=h, ka=ka, kb=kb)
     return ∇², S
 end # 2d laplacian
@@ -481,7 +492,7 @@ end # 2d laplacian
 """
     ∇h∇ = laplacian_sans_bc(N, dx, h, coordinate_system)
 """
-function laplacian_sans_bc(N::Int, dx::Real, h::AbstractArray, coordinate_system::Symbol)
+function laplacian_sans_bc(N::Int, dx::Real, h::AbstractArray, coordinate_system::T) where T<:CoordinateSystem
     I₁, J₁ = Array(2:N), Array(1:N-1)
     V₁ = +1h[2:end-1]/dx^2
     if isPolar(coordinate_system)
@@ -496,7 +507,7 @@ function laplacian_sans_bc(N::Int, dx::Real, h::AbstractArray, coordinate_system
     ∇² = sparse(vcat(I₁,I₂,I₃), vcat(J₁,J₂,J₃), vcat(V₁,V₂,V₃), N, N, +)
     return ∇²
 end
-function laplacian_sans_bc(N::Int, dx::Real, h::Number, coordinate_system::Symbol)
+function laplacian_sans_bc(N::Int, dx::Real, h::Number, coordinate_system::T) where T<:CoordinateSystem
     return laplacian_sans_bc(N, dx, fill(h,N+1), coordinate_system)
 end # laplacian_sans_bc
 
@@ -517,7 +528,7 @@ end # laplacian_apply_bc
     apply_bc(D, operator::Symbol, N::Array, dx::Real, bc<:BoundaryCondition, dim, h, polarity, ka, kb, coordinate_system)
 """
 function apply_bc(D, operator::Symbol, N::Array{Int,1}, dx::Real, bc::RobinBoundaryCondition, dim::Int, h::AbstractArray{V,1},
-            polarity::Symbol, ka::Number, kb::Number, coordinate_system::Symbol) where V<:Number
+            polarity::Symbol, ka::Number, kb::Number, coordinate_system::T) where V<:Number where T<:CoordinateSystem
 
     if !all(size(bc.α[1]) .== fill(N[mod1(dim+1,2)],2))
         A = diagm(0=>vcat(fill(bc.α[1][1],N[mod1(dim+1,2)]),fill(bc.α[2][1],N[mod1(dim+1,2)])))
@@ -581,7 +592,7 @@ function apply_bc(D, operator::Symbol, N::Array{Int,1}, dx::Real, bc::RobinBound
 end # apply_bc RobinBoundaryCondition
 
 function apply_bc(D, operator::Symbol, N::Array{Int}, dx::Real, bc::PeriodicBoundaryCondition, dim::Int, h::AbstractArray{T,1},
-            polarity::Symbol, ka::Number, kb::Number, coordinate_system::Symbol) where T<:Number
+            polarity::Symbol, ka::Number, kb::Number, coordinate_system::U) where T<:Number where U<:CoordinateSystem
 
     if operator==:laplacian
         dx = dx^2
@@ -612,11 +623,11 @@ end # apply_bc PeriodicBoundaryCondition
 """
     apply_bc(D, operator::Symbol, N::Array, dx::Array, bc::Tuple, dim, h, polarity, ka, kb, coordinate_system)
 """
-function apply_bc(D, operator, N, dx, bc, dim, h::Number, polarity::Symbol, ka::Number, kb::Number, coordinate_system::Symbol)
+function apply_bc(D, operator, N, dx, bc, dim, h::Number, polarity::Symbol, ka::Number, kb::Number, coordinate_system::T) where T<:CoordinateSystem
     return apply_bc(D, operator, N, dx, bc, dim, fill(h,N[dim]), polarity, ka, kb, coordinate_system)
 end
 function apply_bc(D, operator::Symbol, N::Array{Int}, dx::Array{U,1}, bc::Tuple{T,S}, dim::Int, h::AbstractArray{V,1},
-            polarity::Symbol, ka::Number, kb::Number, coordinate_system::Symbol) where U<:Real where V<:Number where T<:BoundaryCondition where S<:BoundaryCondition
+            polarity::Symbol, ka::Number, kb::Number, coordinate_system::W) where U<:Real where V<:Number where T<:BoundaryCondition where S<:BoundaryCondition where W<:CoordinateSystem
     return apply_bc(D, operator, N, dx[dim], bc[dim], dim, h[dim], polarity, ka, kb, coordinate_system)
 end # apply_bc
 
@@ -627,18 +638,22 @@ end # apply_bc
 """
     bool = isCartesian(coordinate_system::Symbol)
 """
-function isCartesian(coordinate_system::Symbol)
-    validNames = [:Cartesian, :cartesian, :Cart, :cart]
-    return coordinate_system ∈ validNames
+function isCartesian(coordinate_system::Cartesian)
+    return true
+end
+function isCartesian(coordinate_system)
+    return false
 end
 
 
 """
     bool = isPolar(coordinate_system::Symbol)
 """
-function isPolar(coordinate_system::Symbol)
-    validNames = [:Polar, :polar, :Pol, :pol, :Cylindrical, :cylindrical, :Cyl, :cyl]
-    return coordinate_system ∈ validNames
+function isPolar(coordinate_system::Polar)
+    return true
+end
+function isPolar(coordinate_system)
+    return false
 end
 
 
