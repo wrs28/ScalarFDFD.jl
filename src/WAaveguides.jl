@@ -1,4 +1,5 @@
 # TODO: Test arbitrary profile waveguide, for now have only tested simple waveguide
+module Waveguides
 
 ################################################################################
 ### PLANAR WAVEGUIDES
@@ -315,3 +316,5 @@ function add_pc_waveguide(sys::System; x0=0, y0=0, direction, width)
     waveguide_domains = ScalarFDFD.pc_waveguide_domains(temp_sys.domains[domain]; x0=x0, y0=y0, direction=direction, width=width, waveguide_number=waveguide_number)
     return System(vcat(waveguide_domains,sys.domains))
 end
+
+end # module
