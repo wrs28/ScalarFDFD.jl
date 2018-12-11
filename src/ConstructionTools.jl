@@ -1,10 +1,14 @@
-################################################################################
-# REGIONS STRUCTURE
-################################################################################
+module ConstructionTools
+
+using Shapes,
+SimulationDefinition
+
+export Subdomain
+
 """
-    regions = Regions()
-    regions = Regions(functions, params, n1, n2, F)
-    regions = Regions(domain)
+    subdomains = Subdomains()
+    subdomains = Subdomains(functions, params, type::Shape, ε::Function, F::Function)
+    subdomains = Subdomains(domain)
 
 `Regions()` initializes empty region
 
@@ -12,60 +16,68 @@
 
 `Regions(domain)` makes a region out of background default domain parameters (i.e. n1, n2, etc)
 """
-struct Regions
-    functions::Array{Function,1}
-    params::Array{Array{Float64,1},1}
-    n₁::Array{Float64,1}
-    n₂::Array{Float64,1}
-    F::Array{Float64,1}
+struct Subdomains{Tp}
+    is_in_subdomain::Array{Function,1}
+    params::Array{Tp,1}
+    type::Array{Symbol,1}
+    ε::Array{Function,1}
+    F::Array{Function,1}
 
-    function Regions()
-        new(Function[], Array{Float64}[], Float64[], Float64[], Float64[])
+    function Subdomains()
+        new{Dict{Symbol,Float64},Nothing}(Function[], Dict{Symbol,Float64}[], Symbol[], Function[], Function[])
     end
-    function Regions(functions, params, n₁, n₂, F)
-        new(functions, float.(params), float.(n₁), float.(n₂), float.(F))
+    function Subdomains(is_in_subdomain, params, type, ε, F)
+        new(is_in_subdomain, params, type, ε, F)
     end
-    function Regions(domain::Domain)
-        return Regions(domain.is_in_region, domain.region_params, domain.n₁_val, domain.n₂_val, domain.F_val)
+    function Subdomains(dom::Tdom) where Tdom<:Domain
+        return Subdomains(dom.is_in_subdomain, dom.subdomain_params, dom.subdomain_type, dom.subdomain_ε, dom.subdomain_F)
     end
 end
-Base.show(io::IO, rgn::Regions) = begin
+Base.show(io::IO, sbd::Subdomains) = begin
     print(io,
-    typeof(rgn), " with ", length(rgn.functions), " regions:")
-    temp1 = [["\n\t\tfunction: ", rgn.functions[i]] for i ∈ eachindex(rgn.functions)]
-    temp2 = [["\n\t\tparams: ", rgn.params[i]] for i ∈ eachindex(rgn.params)]
-    temp3 = [["\n\t\tindex n: ", complex(rgn.n₁[i],rgn.n₂[i])] for i ∈ eachindex(rgn.n₁)]
-    temp4 = [["\n\t\tpump F: ", rgn.F[i]] for i ∈ eachindex(rgn.F)]
+    typeof(sbd), " with ", length(sbd.is_in_subdomain), " regions:")
+    temp1 = [["\n\t\tfunction: ", sbd.params[i]] for i ∈ eachindex(sbd.params)]
+    temp2 = [["\n\t\tparams: ", sbd.type[i]] for i ∈ eachindex(sbd.type)]
     for i ∈ eachindex(temp1)
         print(io, "\n\tregion ", i)
         print(io, temp1[i]...)
         print(io, temp2[i]...)
-        print(io, temp3[i]...)
-        print(io, temp4[i]...)
     end
 end
 
 
-################################################################################
-# DOMAIN BUILDING
-################################################################################
 """
-    domain = build_domain(regions; is_in_domain=whole_domain, domain_params=[],
+    domain = build_domain(subdomains; is_in_domain=whole_domain, domain_params=[],
                 n₁=1, n₂=0, F=0, domain_type=:generic, lattice=Bravais())
 
 Builds a domain out of `regions` (::Regions), with background parameters
 `is_in_domain`, `domain_params`, etc.
 """
-function build_domain(regions::Regions=Regions(); is_in_domain=whole_domain, domain_params=[],
-                        n₁=1, n₂=0, F=0, domain_type=:generic, lattice=Bravais(),
-                        which_asymptote=:none, which_waveguide=0)
-    return Domain(; is_in_domain=is_in_domain, n₁=n₁, n₂=n₂, F=F,
-                    domain_params=domain_params, domain_type=domain_type,
-                    is_in_region=regions.functions, region_params=regions.params,
-                    n₁_val=regions.n₁, n₁_idx=1:length(regions.n₁),
-                    n₂_val=regions.n₂, n₂_idx=1:length(regions.n₂),
-                    F_val=regions.F, F_idx=1:length(regions.n₂),
-                    lattice=lattice, which_asymptote=which_asymptote, which_waveguide=which_waveguide )
+function build_domain(subomains::Tsd=Subdomains();
+    is_in_domain::Function=whole_domain,
+    domain_params::Td=Dict(:n₁ => 1, :n₂ => 0, :F => 0),
+    domain_type::Symbol=:background,
+    domain_ε::Function = piecewise_constant_ε,
+    domain_F::Function = piecewise_constant_F,
+    lattice::BravaisLattice = BravaisLattice(),
+    which_asymptote::Symbol = :none,
+    which_waveguide::Int = 0
+    ) where Tsd<:Subdomain where Td<:Dict
+
+    return Domain(; is_in_domain=is_in_domain,
+                    domain_params=domain_params,
+                    domain_type=domain_type,
+                    domain_ε=domain_ε,
+                    domain_F=domain_F,
+                    is_in_subdomain = subdomain.is_in_subdomain,
+                    subdomain_params = subdomain.params,
+                    subdomain_type = subdomain.type,
+                    subdomain_ε = subdomain.ε,
+                    subdomain_F = subdomain.F,
+                    lattice=lattice,
+                    which_asymptote=which_asymptote,
+                    which_waveguide=which_waveguide
+                    )
 end
 
 
@@ -122,3 +134,5 @@ function add_region(new_region_function::Function, new_region_params,
                 vcat(new_region_F, old_regions.F)
                 )
 end
+
+end #module
