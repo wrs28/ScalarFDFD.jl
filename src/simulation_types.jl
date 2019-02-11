@@ -1,7 +1,6 @@
 #TODO: Domain: complete documentation for Domain struct
 #TODO: Add argument warnings or errors or correcition for some range of alphas and betas so that band scheme can work
 
-
 """
     domain = Domain(; is_in_domain = whole_domain,
         domain_params = Dict(:n₁ => 1, :n₂ => 0, :F => 0),
@@ -21,15 +20,15 @@
 
 INCOMPLETE DOCUMENTATION
 """
-struct Domain{Tdp,Tsp}
-    is_in_domain::Function
-    domain_params::Tdp
+struct Domain{TS1,TDP,TS2,TSP}
+    is_in_domain::TS1
+    domain_params::TDP
     domain_type::Symbol
     domain_ε::Function
     domain_F::Function
 
-    is_in_subdomain::Array{Function,1}
-    subdomain_params::Array{Tsp,1}
+    is_in_subdomain::Array{TS2,1}
+    subdomain_params::Array{TSP,1}
     subdomain_type::Array{Symbol,1}
     subdomain_ε::Array{Function,1}
     subdomain_F::Array{Function,1}
@@ -40,25 +39,41 @@ struct Domain{Tdp,Tsp}
 
     num_subdomains::Int
 
-    function Domain(; is_in_domain::Function = whole_domain,
-        domain_params::Td = Dict(:n₁ => 1, :n₂ => 0, :F => 0),
+    function Domain(;
+        is_in_domain::Tsh1 = Universe(),
+        domain_params::Tdp = Dict(:n₁ => 1, :n₂ => 0, :F => 0),
         domain_type::Symbol = :background,
         domain_ε::Function = piecewise_constant_ε,
         domain_F::Function = piecewise_constant_F,
-        is_in_subdomain::Array{Function,1} = Function[],
-        subdomain_params::Array{Ts,1} = Dict{Symbol,Float64}[],
+        is_in_subdomain::Array{Tsh2,1} = Shape[],
+        subdomain_params::Array{Tsp,1} = Dict{Symbol,Float64}[],
         subdomain_type::Array{Symbol,1} = Symbol[],
         subdomain_ε::Array{Function} = Function[],
         subdomain_F::Array{Function} = Function[],
         lattice::BravaisLattice = BravaisLattice(),
         which_asymptote::Symbol = :none,
-        which_waveguide::Int = 0) where Td<:Dict where Ts<:Dict
+        which_waveguide::Int = 0
+        ) where {Tsh1,Tdp,Tsh2,Tsp}
 
         num_subdomains= 1 + length(is_in_subdomain)
 
         @assert !(which_asymptote==:none && which_waveguide!==0) "assigned waveguide id $(which_waveguide) to non-asymptotic domain"
 
-        return new{Td,Ts}(is_in_domain, domain_params, domain_type, domain_ε, domain_F,
+        if haskey(domain_params,:n₁)
+            push!(domain_params,:n1=>domain_params[:n₁])
+        end
+        if haskey(domain_params,:n1)
+            push!(domain_params,:n₁=>domain_params[:n1])
+        end
+        if haskey(domain_params,:n₂)
+            push!(domain_params,:n2=>domain_params[:n₂])
+        end
+        if haskey(domain_params,:n2)
+            push!(domain_params,:n₂=>domain_params[:n2])
+        end
+
+        return new{Tsh1,Tdp,Tsh2,Tsp}(
+        is_in_domain, domain_params, domain_type, domain_ε, domain_F,
         is_in_subdomain, subdomain_params, subdomain_type, subdomain_ε, subdomain_F,
         lattice, which_asymptote, which_waveguide, num_subdomains)
     end
@@ -73,15 +88,13 @@ collection of domains that defines System, an input for Simulation.
 
 input can be array or scalar.
 """
-struct System{Tdom,Tpar}
-    domains::Array{Tdom,1}
+struct System{TDOM,TPAR}
+    domains::Array{TDOM,1}
     ε::Array{ComplexF64,2}
     F::Array{Float64,2}
-    Σd::Array{ComplexF64,2}
-    Σe::Array{ComplexF64,2}
 
     domain_by_region::Array{Int,1}
-    params_by_region::Array{Tpar,1}
+    params_by_region::Array{TPAR,1}
     ε_by_region::Array{Function,1}
     F_by_region::Array{Function,1}
 
@@ -90,16 +103,15 @@ struct System{Tdom,Tpar}
 
     waveguides::Array{Int,1}
 
-    function System(domains::Array{Td,1} = [Domain()],
-                    ε::Array{ComplexF64,2} = Array{ComplexF64}(undef, 0, 0),
-                    F::Array{Float64,2} = Array{Float64}(undef, 0, 0),
-                    Σd::Array{ComplexF64,2} = Array{ComplexF64}(undef, 0, 0),
-                    Σe::Array{ComplexF64,2} = Array{ComplexF64}(undef, 0, 0),
-                    regions::Array{Int,2} = Array{Int}(undef, 0, 0)
-                    ) where Td<:Domain
+    function System(
+                domains::Array{Td,1} = [Universe(1)],
+                ε::Array{ComplexF64,2} = Array{ComplexF64}(undef, 0, 0),
+                F::Array{Float64,2} = Array{Float64}(undef, 0, 0),
+                regions::Array{Int,2} = Array{Int}(undef, 0, 0)
+                ) where Td<:Domain
 
         # protect from downstream changes
-        domains = deepcopy(domains)
+        # domains = copy(domains)
 
         # order domains
         sort!(domains, by=isBulkWaveguide, rev=false)
@@ -144,147 +156,85 @@ struct System{Tdom,Tpar}
 
         waveguides = sort(unique([domains[i].which_waveguide for i ∈ eachindex(domains)]))[2:end]
 
-        return new{Td,eltype(params_by_region)}(domains, ε, F, Σd, Σe, domain_by_region, params_by_region, ε_by_region, F_by_region, regions, num_prev_regions, waveguides)
+        return new{Td,eltype(params_by_region)}(domains, ε, F, domain_by_region, params_by_region, ε_by_region, F_by_region, regions, num_prev_regions, waveguides)
     end
 end
 
 
-struct Discretization{Tcs}
-    dx::Array{Float64,1}
-    coordinate_system::Tcs
+struct Discretization{TCS}
+    dx::NTuple{2,Float64}
+    coordinate_system::Type{TCS}
     sub_pixel_num::Int
-    origin::Array{Float64,1}
+    origin::NTuple{2,Float64}
 
-    N_tr::Array{Int,1}
-    N::Array{Int,1}
-    dN::Array{Int,2}
+    N_tr::NTuple{2,Int}
+    N::NTuple{2,Int}
+    dN::NTuple{2,NTuple{2,Int}}
 
-    x::Array{Array{Float64,2},1}
-    x_tr::Array{Array{Float64,2},1}
-    x_idx::Array{Array{Int,1},1}
+    x::NTuple{2,Array{Float64,2}}
+    x_tr::NTuple{2,Array{Float64,2}}
+    x_idx::NTuple{2,Array{Int,1}}
 
     X::Array{Float64,2}
     Y::Array{Float64,2}
 
     X_idx::Array{Int,1}
 
-    function Discretization(dx::Array, coordinate_system::T, sub_pixel_num, origin, N, dN) where T<:CoordinateSystem
+    function Discretization(dx::Tuple, coordinate_system::Type, sub_pixel_num::Int, origin::Tuple, N::Tuple, dN::NTuple{2,Tuple})
 
-        dx = deepcopy(dx)
-        sub_pixel_num=deepcopy(sub_pixel_num)
-        origin = deepcopy(origin)
-        N = deepcopy(N)
-        dN = deepcopy(dN)
+        N_tr = (N[1] - dN[1][1] - dN[1][2], N[2] - dN[2][1] - dN[2][2])
 
-        N_tr = Array{Int}(undef,2)
-        for j ∈ eachindex(N)
-            N_tr[j] = N[j] - dN[1,j] - dN[2,j]
-        end
-
-        x_tr = [Array{Float64}(undef,N_tr[1],1), Array{Float64}(undef,1,N_tr[2])]
-        x = [Array{Float64}(undef,N[1],1), Array{Float64}(undef,1,N[2])]
-        x_idx = [Array{Int}(undef, N_tr[1]), Array{Int}(undef, N_tr[2])]
+        x_tr = (Array{Float64}(undef,N_tr[1],1), Array{Float64}(undef,1,N_tr[2]))
+        x = (Array{Float64}(undef,N[1],1), Array{Float64}(undef,1,N[2]))
+        x_idx = (Array{Int}(undef, N_tr[1]), Array{Int}(undef, N_tr[2]))
         for j ∈ eachindex(N)
             if !isinf(dx[j])
                 x[j][:] .= origin[j] .+ dx[j]*(1/2:N[j]-1/2)
-                x_tr[j][:] .= x[j][1] .+ dN[1,j]*dx[j] .+ collect(0:N_tr[j]-1).*dx[j]
-                x_idx[j][:] .= dN[1,j] .+ (1:N_tr[j])
+                x_tr[j][:] .= x[j][1] .+ dN[j][1]*dx[j] .+ collect(0:N_tr[j]-1).*dx[j]
+                x_idx[j][:] .= dN[j][1] .+ (1:N_tr[j])
             else
                 x[j][:] .= origin[j]
                 x_tr[j][:] .= x[j][1]
-                x_idx[j][:] .= dN[1,j] .+ (1:N_tr[j])
+                x_idx[j][:] .= dN[j][1] .+ (1:N_tr[j])
             end
         end
 
-        @assert (isCartesian(coordinate_system) | isPolar(coordinate_system)) "unrecognized coordinate system type $coordinate_system"
-        if isCartesian(coordinate_system)
+        @assert coordinate_system ∈ [Cartesian,Polar] "unrecognized coordinate system type $coordinate_system"
+        if coordinate_system == Cartesian
             X, Y = broadcast((x,y)->x,x[1],x[2]), broadcast((x,y)->y,x[1],x[2])
-            CS = Cartesian()
         else
             X = x[1].*cos.(x[2])
             Y = x[1].*sin.(x[2])
-            CS = Polar()
         end
 
         X_idx = LinearIndices(Array{Bool}(undef, N...))[x_idx...][:]
-
-        return new{typeof(CS)}(float.(dx), CS, sub_pixel_num, float.(origin), N_tr, N, dN,
+        return new{coordinate_system}(float.(dx), coordinate_system, sub_pixel_num, float.(origin), N_tr, N, dN,
             x, x_tr, x_idx, X, Y, X_idx)
     end
 end
 
 
-struct Boundary{Tbc1,Tbc2}
-    ∂Ω::Array{Float64,2}
-    ∂Ω_tr::Array{Float64,2}
+struct Boundary{TBC11,TBC12,TBC21,TBC22,TBL11,TBL12,TBL21,TBL22}
+    ∂Ω::NTuple{2,NTuple{2,Float64}}
+    ∂Ω_tr::NTuple{2,NTuple{2,Float64}}
+    bc::Tuple{Tuple{TBC11,TBC12},Tuple{TBC21,TBC22}}
+    bl::Tuple{Tuple{TBL11,TBL12},Tuple{TBL21,TBL22}}
 
-    bc::Array{Symbol,2}
+    function Boundary(
+                ∂Ω::NTuple{2,NTuple{2,Number}},
+                BC::Tuple{Tuple{TBC1,TBC2},Tuple{TBC3,TBC4}} where {TBC1<:AbstractBC,TBC2<:AbstractBC,TBC3<:AbstractBC,TBC4<:AbstractBC},
+                BL::Tuple{Tuple{TBL1,TBL2},Tuple{TBL3,TBL4}} where {TBL1<:AbstractBL,TBL2<:AbstractBL,TBL3<:AbstractBL,TBL4<:AbstractBL},
+                )
+        (typeof(BL[1][1])<:Union{PML,cPML} && !(typeof(BC[1][1])<:DirichletBC)) ? (@warn "absorbing layer with non-dirichlet condition for dim 1, side 1, which is inconsistent") : nothing
+        (typeof(BL[1][2])<:Union{PML,cPML} && !(typeof(BC[1][2])<:DirichletBC)) ? (@warn "absorbing layer with non-dirichlet condition for dim 1, side 2, which is inconsistent") : nothing
+        (typeof(BL[2][1])<:Union{PML,cPML} && !(typeof(BC[2][1])<:DirichletBC)) ? (@warn "absorbing layer with non-dirichlet condition for dim 2, side 1, which is inconsistent") : nothing
+        (typeof(BL[2][2])<:Union{PML,cPML} && !(typeof(BC[2][2])<:DirichletBC)) ? (@warn "absorbing layer with non-dirichlet condition for dim 2, side 2, which is inconsistent") : nothing
 
-    bl::Array{Symbol,2}
-    bl_depth::Array{Float64,2}
+        ∂Ω_tr1 = (∂Ω[1][1] + BL[1][1].depth, ∂Ω[1][2] - BL[1][2].depth)
+        ∂Ω_tr2 = (∂Ω[2][1] + BL[2][1].depth, ∂Ω[2][2] - BL[2][2].depth)
+        ∂Ω_tr = (∂Ω_tr1, ∂Ω_tr2)
 
-    α::Array{ComplexF64,2}
-    BC::Tuple{Tbc1,Tbc2}
-
-    function Boundary(∂Ω::Array{S,2}, bc::Array{Symbol,2}, BC::Tuple{Q,L}, bl::Array{Symbol,2},
-                bl_depth::Array{V,2}) where Q<:BoundaryCondition where L<:BoundaryCondition where S<:Real where V<:Real
-        ∂Ω, ∂Ω_tr, bc, bl, bl_depth, α = BoundaryCore(∂Ω, bc, bl, bl_depth)
-        return new{Q,L}(∂Ω, ∂Ω_tr, bc, bl, bl_depth, α, BC)
-    end
-    function Boundary(∂Ω::Array{S,2}, bc::Array{Symbol,2}, bl::Array{Symbol,2},
-                bl_depth::Array{V,2}) where S<:Real where V<:Real
-        ∂Ω, ∂Ω_tr, bc, bl, bl_depth, α = BoundaryCore(∂Ω, bc, bl, bl_depth)
-        return new{BoundaryCondition,BoundaryCondition}(∂Ω, ∂Ω_tr, bc, bl, bl_depth, α)
-    end
-    function BoundaryCore(∂Ω::Array{S,2}, bc::Array{Symbol,2}, bl::Array{Symbol,2},
-        bl_depth::Array{V,2}) where Q<:BoundaryCondition where L<:BoundaryCondition where S<:Real where V<:Real
-
-        ∂Ω = deepcopy(∂Ω)
-        bc = deepcopy(bc)
-        bl = deepcopy(bl)
-        bl_depth = deepcopy(bl_depth)
-
-        ∂Ω_tr = Array{Float64}(undef, 2, 2)
-
-        fix_bc!(bc)
-        fix_bl!(bl)
-
-        for i ∈ CartesianIndices(bl)
-            if bl[i] == :none
-                if !iszero(bl_depth[i])
-                    @warn "boundary layer [$(i[1]),$(i[2])] set to :none, but has thickness $(bl_depth[i]) > 0
-        setting bl_depth[$(i[1]),$(i[2])] = 0"
-                end
-                bl_depth[i] = 0
-            elseif bl[i] ∈ [:pml_out, :pml_in, :abs_out, :abs_in] && bc[i] == :p
-                nothing
-            elseif bl[i] ∈ [:pml_out, :pml_in, :abs_out, :abs_in] && bc[i] !== :d
-                @warn "absorbing layer with non-dirichlet condition for side [$(i[1]), $(i[2])], which is inconsistent
-        prioritizing absorbing layer
-        setting bc[$(i[1]),$(i[2])] = :d"
-                bc[i] = :d
-            end
-        end
-
-        for j ∈ 1:2
-            ∂Ω_tr[1,j] = ∂Ω[1,j] + bl_depth[1,j]
-            ∂Ω_tr[2,j] = ∂Ω[2,j] - bl_depth[2,j]
-        end
-
-        α = Array{ComplexF64}(undef,2,2)
-        for i ∈ CartesianIndices(α)
-            if bl[i] !== :none
-                β = 2*sqrt(bl_depth[i])
-                α[i] = -(1/4)*exp(complex(0,SCALING_ANGLE))*log(EXTINCTION)/bl_depth[i]/((2exp(β)-β)/(2β*(exp(β)-1))-1/β^2)
-            else
-                α[i] = 0
-            end
-            if bl[i] ∈ [:abs_in, :pml_in]
-                α[i] = flipsign(conj(α[i]),-1)
-            end
-        end
-
-        return float.(∂Ω), float.(∂Ω_tr), bc, bl, float.(bl_depth), α
+        new{typeof(BC[1][1]),typeof(BC[1][2]),typeof(BC[2][1]),typeof(BC[2][2]),typeof(BL[1][1]),typeof(BL[1][2]),typeof(BL[2][1]),typeof(BL[2][2])}(map(x->map(float,x),∂Ω),map(x->map(float,x),∂Ω_tr),BC,BL)
     end
 end
 
@@ -304,9 +254,7 @@ struct Channels
     dispersion::Array{AbstractInterpolation,1}
     gaps::Array{Array{Float64,1},1}
 
-    function Channels(waveguide=0, quantum_number=0)
-        return  new(waveguide, quantum_number, AbstractInterpolation[], Array{Float64,1}[])
-    end
+    Channels(waveguide=0, quantum_number=0) = new(waveguide, quantum_number, AbstractInterpolation[], Array{Float64,1}[])
 end
 
 
@@ -355,10 +303,7 @@ struct TwoLevelSystem
     γp::Float64
     ω₀::Float64
 
-    function TwoLevelSystem(D₀=0., k₀=10., γp=1e8, ω₀=k₀)
-            ω₀ = k₀
-        return new(float(D₀), float(k₀), float(γp), float(ω₀))
-    end
+    TwoLevelSystem(D₀=0., k₀=10., γp=1e8, ω₀=k₀) = new(float(D₀), float(k₀), float(γp), float(ω₀))
 end
 
 
@@ -369,31 +314,30 @@ See also: [`System`](@ref), [`Boundary`](@ref), [`Discretization`](@ref), [`Scat
 
 simulation object
 """
-struct Simulation{Tsys,Tbnd,Tdis}
-    sys::Tsys
-    bnd::Tbnd
-    dis::Tdis
+struct Simulation{TSYS,TBND,TDIS}
+    sys::TSYS
+    bnd::TBND
+    dis::TDIS
     sct::Scattering
     tls::TwoLevelSystem
     lat::BravaisLattice
 
-    function Simulation(;sys::Ts=System(),
-        bnd::Tb,
-        dis::Tdis,
-        sct::Scattering=Scattering(),
-        tls::TwoLevelSystem=TwoLevelSystem(),
-        lat::BravaisLattice=BravaisLattice(bnd),
-        disp_opt=false) where Ts<:System where Tb<:Boundary where Tdis<:Discretization
+    function Simulation(
+        bnd::Boundary,
+        dis::Discretization{CS},
+        sys::System,
+        sct::Scattering,
+        tls::TwoLevelSystem,
+        lat::BravaisLattice;
+        disp_opt=false
+        ) where CS<:CoordinateSystem
 
         # shield structures from downstream changes
-        sys = deepcopy(sys); bnd = deepcopy(bnd); dis = deepcopy(dis)
-        sct = deepcopy(sct); tls = deepcopy(tls); lat = deepcopy(lat)
+        # sys = deepcopy(sys); bnd = deepcopy(bnd); dis = deepcopy(dis)
+        # sct = deepcopy(sct); tls = deepcopy(tls); lat = deepcopy(lat)
 
         ∂Ω = bnd.∂Ω
-        L = Array{Float64}(undef,2)
-        for i ∈ 1:2
-            L[i] = ∂Ω[2,i]-∂Ω[1,i]
-        end
+        L = (∂Ω[1][2]-∂Ω[1][1],∂Ω[2][2]-∂Ω[2][1])
 
         dx = dis.dx
         @assert all(L./dx .< Inf) "lattice spacings $dx inconsistent with size $L"
@@ -402,40 +346,49 @@ struct Simulation{Tsys,Tbnd,Tdis}
         dN = Array{Int}(undef,2,2)
         index1 = findmin(N)[2]
         index2 = mod1(index1+1,2)
+        @assert !iszero(L[index2]) "no width along dimension $index2"
         if N[index1]≤1
-            N[index1] = 1
-            dx[index1] = Inf
-            dx[index2] = L[index2]/N[index2]
-            dN[:,index1] .= 0
-            dN[:,index2] .= floor.(Int, bnd.bl_depth[:,index2]/dx[index2])
-            bnd.bl_depth[:,index1] .= 0
-            bnd.bl_depth[:,index2] .= dN[:,index2]*dx[index2]
-            bnd.bl[:,index1] .= :none
-            bnd.bc[:,index1] .= :d
+            # N[index1] = 1
+            # DX = [Inf, L[index2]/N[index2]]
+            # dx = DX[[index1,index2]]
+            # dN[:,index1] .= 0
+            # dN[:,index2] .= floor.(Int, bnd.bl_depth[:,index2]/dx[index2])
+            # for side ∈ 1:2
+            #     bnd.BL[index2][side].depth = dN[side,index2]*dx[index2]
+            # end
         else
-            dx[index1] = L[index1]/N[index1]
-            dx[index2] = L[index2]/round(Int,L[index2]/dx[index2])
+            DX = [L[index1]/N[index1], L[index2]/round(Int,L[index2]/dx[index2])]
+            dx = (DX[index1],DX[index2])
             N = round.(Int,L./dx)
-            for i ∈ 1:2
-                dN[:,i] = floor.(Int, bnd.bl_depth[:,i]/dx[i])
-                bnd.bl_depth[:,i] = dN[:,i]*dx[i]
+            dN = ()
+            for dim ∈ 1:2
+                dNside = ()
+                for side ∈ 1:2
+                    dNside = (dNside...,floor(Int, bnd.bl[dim][side].depth/dx[dim]))
+                end
+                dN = (dN...,dNside)
+            end
+
+            for dim ∈ 1:2, side ∈ 1:2
+                bnd.bl[dim][side].depth = dN[dim][side]*dx[dim]
             end
         end
 
-        origin = bnd.∂Ω[1,:]
+        @assert all(sum.(dN) .< N) "boundary layers fill entire region. increase size of domain or decrease size of boundary layers."
 
-        bnd = Boundary(∂Ω, bnd.bc, ezbc([bnd.bc[1,1],bnd.bc[2,1]],[bnd.bc[1,2],bnd.bc[2,2]],N), bnd.bl, bnd.bl_depth)
+        origin = (bnd.∂Ω[1][1],bnd.∂Ω[2][1])
+        bnd = Boundary(∂Ω, apply_args(bnd.bc, CS; N=N, dx=dx, xmin=origin, lattice=lat), apply_args(bnd.bl; Δ=∂Ω))
         dis = Discretization(dx, dis.coordinate_system, dis.sub_pixel_num, origin, N, dN)
 
         # argument checking
-        if :p ∈ bnd.bc[:,1] && isinf(lat.a)
-            @warn "periodic bc in dimension 1, but infinite lattice constant. redefining lat.a = width of domain"
-            lat.a = bnd.∂Ω[2,1]-bnd.∂Ω[1,1]
+        for side ∈ 1:2
+            for dim ∈ 1:2
+                typeof(bnd.bc[dim][side])<:PeriodicBC ? (typeof(bnd.bc[dim][mod1(side+1,2)])<:PeriodicBC ? nothing : (@warn "only one side=$side of dim=$dim set to periodic")) : nothing
+            end
+            @assert ((typeof(bnd.bc[1][side])<:PeriodicBC && !isinf(lat.a)) || !(typeof(bnd.bc[1][side])<:PeriodicBC)) "periodic bc in dim=1, but infinite lattice constant a"
+            @assert ((typeof(bnd.bc[2][side])<:PeriodicBC && !isinf(lat.b)) || !(typeof(bnd.bc[1][side])<:PeriodicBC)) "periodic bc in dim=2, but infinite lattice constant b"
         end
-        if :p ∈ bnd.bc[:,2] && isinf(lat.b)
-            @warn "periodic bc in dimension 2, but infinite lattice constant. redefining lat.b = height of domain"
-            lat.b = bnd.∂Ω[2,2]-bnd.∂Ω[1,2]
-        end
+
         for i ∈ eachindex(sys.domains)
             if N[1] == 1 && !isinf(sys.domains[i].lattice.a)
                 @warn "one-dimensional (vertical) system, but domain $(i) has finite transverse lattice constant $(sys.domains[i].lattice.a) < ∞"
@@ -444,13 +397,18 @@ struct Simulation{Tsys,Tbnd,Tdis}
                 @warn "one-dimensional (horizontal) system, but domain $(i) has finite transverse lattice constant $(sys.domains[i].lattice.b) < ∞"
             end
         end
-        ɛ, F, regions = sub_pixel_smoothing(bnd, dis, sys; disp_opt=disp_opt)
-        Σd, Σe = σ(dis, bnd)
-        sys = System(sys.domains, ε, F, Σd, Σe, regions)
 
+        ɛ, F, regions = sub_pixel_smoothing(bnd, dis, sys; disp_opt=disp_opt)
+
+        sys = System(sys.domains, ε, F, regions)
+
+        which_waveguides = Array{Int,1}(undef,length(sys.domains))
+        for j ∈ eachindex(sys.domains)
+            which_waveguides[j] = sys.domains[j].which_waveguide
+        end
         for i ∈ 1:length(sct.waveguides_used)
             sct.ɛ₀[i] = Array{ComplexF64}(undef,dis.N[1],dis.N[2])
-            wg_inds = findall([sys.domains[j].which_waveguide for j ∈ eachindex(sys.domains)] .== sct.waveguides_used[i])
+            wg_inds = findall(which_waveguides .== sct.waveguides_used[i])
             wg_domains = Array{Domain}(undef,length(wg_inds))
             for j ∈ eachindex(wg_domains)
                 wg_domains[j] = Domain(sys.domains[wg_inds[j]]; :which_asymptote => :none, :which_waveguide => 0)
@@ -462,6 +420,6 @@ struct Simulation{Tsys,Tbnd,Tdis}
             end
         end
 
-        return new{Ts,typeof(bnd), Tdis}(sys, bnd, dis, sct, tls, lat)
+        return new{typeof(sys), typeof(bnd), typeof(dis)}(sys, bnd, dis, sct, tls, lat)
     end
 end

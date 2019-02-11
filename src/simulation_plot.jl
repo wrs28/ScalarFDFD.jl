@@ -31,122 +31,170 @@ end
 
 
 # 1d plot
-@recipe function f(sim::Simulation, ψ::Array, by::Union{Function,Nothing}, dim1::Int)
+@recipe function f(sim::Simulation, ψ::Array, by::Union{Function,Nothing}, truncate::Bool, dim1::Int)
 
-    if isempty(ψ)
-        N=0
-    else
-        N = size(ψ,2)
-    end
+    (N, x_f_start, x_f_stop, x_f, x_t_start, x_t_stop, x_t,
+        y_f_start, y_f_stop, y_f, y_t_start, y_t_stop, y_t,
+        ε, F, ψ_plot, boundary_data, pml_data) = prep_data(sim, ψ, truncate)
 
-    if size(ψ,1) == prod(sim.dis.N) || isempty(ψ)
-        if sim.dis.N[1]==1
-            x = sim.dis.x[2][:]
-            M = sim.dis.N[2]
-            ∂Ω = sim.bnd.∂Ω[:,2]
-            ε = sim.sys.ε[1,:]
-            F = sim.sys.F[1,:]
-            bottom_label = "y"
-        else
-            x = sim.dis.x[1][:]
-            M = sim.dis.N[1]
-            ∂Ω = sim.bnd.∂Ω[:,1]
-            ε = sim.sys.ε[:,1]
-            F = sim.sys.F[:,1]
-            bottom_label = "x"
-        end
-    else
-        if sim.dis.N[1]==1
-            x = sim.dis.x_tr[2][:]
-            M = sim.dis.N_tr[2]
-            ∂Ω = sim.bnd.∂Ω_tr[:,2]
-            ε = sim.sys.ε[1,sim.dis.X_idx]
-            F = sim.sys.F[1,sim.dis.X_idx]
-            bottom_label = "y"
-        else
-            x = sim.dis.x_tr[1][:]
-            M = sim.dis.N_tr[1]
-            ∂Ω = sim.bnd.∂Ω_tr[:,1]
-            ε = sim.sys.ε[sim.dis.X_idx,1]
-            F = sim.sys.F[sim.dis.X_idx,1]
-            bottom_label = "x"
-        end
-    end
+    cmapc, cmapk, cmapsim1, cmapsim2, n_mult, F_sign = fix_colormap(COLOR_SCHEME)
 
-    ψ_plot = ψ
-    n_mult = 1.1
-    seriestype := :line
-    overwrite_figure := false
-    legend --> false
+    xlims --> [x_t_start,x_t_stop]
+    colorbar --> false
+    overwrite_figure --> false
+    levels --> 15
     lw --> 2
+    seriestype := :line
+    legend --> false
+
+    if sim.dis.N[1]==1
+        bottom_label = "y"
+    else
+        bottom_label = "x"
+    end
 
     if by==nothing
 
-        size --> 250*[3,1+N]
-        layout := (1+N,3)
+        layout --> (1+N,3)
 
+        # plot simulation
+        titles = ["real", "imag", "F/abs²"]
         @series begin
-            ylabel := string("Re{n(", bottom_label, ")}")
-            xlabel --> bottom_label
             subplot := 1
-            n = real(sqrt.(ɛ-1im*sim.tls.D₀*F))
-            ylims := (minimum(n), n_mult*maximum(n))
-            x, n
+            title := titles[1]
+            seriestype := :line
+            n₁ = real(sqrt.(ɛ-1im*sim.tls.D₀*F))
+            x_f[:], n₁[:]
         end
         @series begin
-            ylabel := string("Im{n(", bottom_label, ")}")
-            xlabel --> bottom_label
             subplot := 2
-            n = imag(sqrt.(ɛ-1im*sim.tls.D₀*F))
-            ylims := (-maximum(abs.(n)), maximum(abs.(n)))
-            x, n
+            title := titles[2]
+            seriestype := :line
+            n₂ = imag(sqrt.(ɛ-1im*sim.tls.D₀*F))
+            x_f[:], n₂[:]
         end
         @series begin
-            ylabel := string("F(", bottom_label, ")")
-            xlabel --> bottom_label
             subplot := 3
-            ylims := (-maximum(abs.(F)), maximum(abs.(F)))
-            x, F
+            title := titles[3]
+            seriestype := :line
+            x_f[:], F[:]
         end
 
         for i ∈ 1:N
-            ψ = ψ_plot[:,i]
+            ψ = ψ_plot[:,:,i]
             @series begin
-                ylabel := LaTeXString("Re\\{\\psi\\}")
-                xlabel --> bottom_label
                 subplot := 3i+1
-                ylims = (-maximum(abs.(ψ)), maximum(abs.(ψ)))
-                x, real(ψ)
+                x_t[:], real(ψ[:])
             end
             @series begin
-                ylabel := LaTeXString("Im\\{\\psi\\}")
-                xlabel --> bottom_label
                 subplot := 3i+2
-                ylims = (-maximum(abs.(ψ)), maximum(abs.(ψ)))
-                x, imag(ψ)
+                x_t[:], imag(ψ[:])
             end
             @series begin
-                ylabel := LaTeXString("|\\psi|^2")
-                xlabel --> bottom_label
                 subplot := 3i+3
-                ylims := (0, maximum(abs2.(ψ)))
-                x, abs2.(ψ)
+                x_t[:], abs2.(ψ[:])
             end
         end
     else
-        layout := N
-        for i ∈ 1:N
-            ψ = ψ_plot[:,i]
+        if iszero(N)
+            layout --> (1,1)
             @series begin
-                if by ∈ [abs, abs2]
-                    ylims := (0, by.(ψ))
-                else
-                    ylims := (-maximum(abs.(ψ)), maximum(abs.(ψ)))
+                subplot := 1
+                n = sqrt.(ɛ-1im*sim.tls.D₀*F)
+                x_f[:], by.(n[:])
+            end
+        else
+            if round(Int,N/3)==N/3
+                N_col=3
+                N_row = ceil(Int,N/3)
+            elseif round(Int,N/2)==N/2
+                N_col=2
+                N_row = ceil(Int,N/2)
+            elseif N==1
+                N_col=1
+                N_row=1
+            else
+                N_col = 3
+                N_row = ceil(Int,N/3)
+            end
+            layout --> (N_row,N_col)
+            for i ∈ 1:N
+                ψ = ψ_plot[:,:,i]
+                @series begin
+                    subplot := i
+                    x_t[:], by.(ψ[:])
                 end
-                x, by.(ψ)
             end
         end
     end
+
+    # if by==nothing
+    #
+    #     size --> 250*[3,1+N]
+    #     layout := (1+N,3)
+    #
+    #     @series begin
+    #         ylabel := string("Re{n(", bottom_label, ")}")
+    #         xlabel --> bottom_label
+    #         subplot := 1
+    #         n = real(sqrt.(ɛ-1im*sim.tls.D₀*F))
+    #         ylims := (minimum(n), n_mult*maximum(n))
+    #         x, n
+    #     end
+    #     @series begin
+    #         ylabel := string("Im{n(", bottom_label, ")}")
+    #         xlabel --> bottom_label
+    #         subplot := 2
+    #         n = imag(sqrt.(ɛ-1im*sim.tls.D₀*F))
+    #         ylims := (-maximum(abs.(n)), maximum(abs.(n)))
+    #         x, n
+    #     end
+    #     @series begin
+    #         ylabel := string("F(", bottom_label, ")")
+    #         xlabel --> bottom_label
+    #         subplot := 3
+    #         ylims := (-maximum(abs.(F)), maximum(abs.(F)))
+    #         x, F
+    #     end
+    #
+    #     for i ∈ 1:N
+    #         ψ = ψ_plot[:,i]
+    #         @series begin
+    #             ylabel := LaTeXString("Re\\{\\psi\\}")
+    #             xlabel --> bottom_label
+    #             subplot := 3i+1
+    #             ylims = (-maximum(abs.(ψ)), maximum(abs.(ψ)))
+    #             x, real(ψ)
+    #         end
+    #         @series begin
+    #             ylabel := LaTeXString("Im\\{\\psi\\}")
+    #             xlabel --> bottom_label
+    #             subplot := 3i+2
+    #             ylims = (-maximum(abs.(ψ)), maximum(abs.(ψ)))
+    #             x, imag(ψ)
+    #         end
+    #         @series begin
+    #             ylabel := LaTeXString("|\\psi|^2")
+    #             xlabel --> bottom_label
+    #             subplot := 3i+3
+    #             ylims := (0, maximum(abs2.(ψ)))
+    #             x, abs2.(ψ)
+    #         end
+    #     end
+    # else
+    #     layout := N
+    #     for i ∈ 1:N
+    #         ψ = ψ_plot[:,i]
+    #         @series begin
+    #             if by ∈ [abs, abs2]
+    #                 ylims := (0, by.(ψ))
+    #             else
+    #                 ylims := (-maximum(abs.(ψ)), maximum(abs.(ψ)))
+    #             end
+    #             x, by.(ψ)
+    #         end
+    #     end
+    # end
 end
 
 
@@ -169,7 +217,7 @@ end
     seriestype --> :heatmap
     legend --> false
 
-    if by==nothing || iszero(N)
+    if by==nothing
 
         layout --> (1+N,3)
 
@@ -182,7 +230,7 @@ end
             seriestype := :heatmap
             n₁ = real(sqrt.(ɛ-1im*sim.tls.D₀*F))
             clims := (minimum(n₁), n_mult*maximum(n₁))
-            y_f, x_f, permutedims(n₁)
+            x_f, y_f, permutedims(n₁)
         end
         @series begin
             subplot := 2
@@ -202,30 +250,31 @@ end
             x_f, y_f, permutedims(F)
         end
         for j ∈ 1:3
-            for i ∈ eachindex(sim.bnd.bc)
-                if isDirichlet(sim.bnd.bc[i])
-                    linestyle := :solid
-                elseif isNeumann(sim.bnd.bc[i])
-                    linestyle := :dash
-                end
-                if !isNone(sim.bnd.bl[i])
-                    if isPMLout(sim.bnd.bl[i])
-                        fill_color = :red
-                    elseif isPMLin(sim.bnd.bl[i])
-                        fill_color = :blue
+            for k ∈ 1:2
+                for i ∈ eachindex(sim.bnd.bc)
+                    if isDirichlet(sim.bnd.bc[k][i])
+                        linestyle := :solid
+                    elseif isNeumann(sim.bnd.bc[k][i])
+                        linestyle := :dash
                     end
-                    @series begin
-                        subplot := j
-                        title := titles[j]
-                        lw := 0
-                        seriestype := :path
-                        color := fill_color
-                        alpha := .15
-                        fill --> (0,.15,fill_color)
-                        pml_data[i]
+                    if !isNone(sim.bnd.bl[k][i])
+                        if isPMLout(sim.bnd.bl[k][i])
+                            fill_color = :red
+                        elseif isPMLin(sim.bnd.bl[k][i])
+                            fill_color = :blue
+                        end
+                        @series begin
+                            subplot := j
+                            title := titles[j]
+                            lw := 0
+                            seriestype := :path
+                            color := fill_color
+                            alpha := .15
+                            fill --> (0,.15,fill_color)
+                            pml_data[i]
+                        end
                     end
-                end
-                if isDirichlet(sim.bnd.bc[i]) | isNeumann(sim.bnd.bc[i])
+                    if isDirichlet(sim.bnd.bc[k][i]) | isNeumann(sim.bnd.bc[k][i])
                     @series begin
                         subplot := j
                         title := titles[j]
@@ -237,6 +286,7 @@ end
                 end
             end
         end
+    end
 
         for i ∈ 1:N
             ψ = ψ_plot[:,:,i]
@@ -260,56 +310,101 @@ end
             end
         end
     else
-        if by ∈ [abs, abs2]
-            cmap = cmapk
-            clims --> (0,1)
-        else
-            cmap = cmapc
-            clims --> (-1,1)
-        end
-        if round(Int,N/3)==N/3
-            N_col=3
-            N_row = ceil(Int,N/3)
-        elseif round(Int,N/2)==N/2
-            N_col=2
-            N_row = ceil(Int,N/2)
-        elseif N==1
-            N_col=1
-            N_row=1
-        else
-            N_col = 3
-            N_row = ceil(Int,N/3)
-        end
-        layout --> (N_row,N_col)
-        for i ∈ 1:N
-            ψ = ψ_plot[:,:,i]
-            n₁ = real(sqrt.(ɛ-1im*sim.tls.D₀*F))
-            renorm = (maximum(abs.(ψ)) - minimum(abs.(ψ)))/(maximum(n₁)-minimum(n₁))
-
-            n₁ = n₁ .- minimum(n₁)
-            n₁ = renorm*n₁
+        if iszero(N)
+            layout --> (1,1)
             @series begin
-                subplot := i
+                subplot := 1
+                color := cmapsim1
                 seriestype := :heatmap
-                seriesalpha := 1.
-                if by ∈ [abs, abs2]
-                    color := cmapsim1
-                else
-                    n₁ = n₁ .- maximum(abs.(ψ))
-                    color := cmapsim1
-                end
-                x_f, y_f, permutedims(n₁)
+                n = sqrt.(ɛ-1im*sim.tls.D₀*F)
+                clims := (minimum(by.(n)), maximum(by.(n)))
+                x_f, y_f, permutedims(by.(n))
             end
-            @series begin
-                subplot := i
-                color := cmap
-                seriesalpha --> .85
-                if by ∈ [abs, abs2]
-                    clims --> (0, maximum(by.(ψ)))
-                else
-                    clims --> (-maximum(abs.(ψ)),+maximum(abs.(ψ)))
+            for i ∈ eachindex(sim.bnd.bc)
+                if isDirichlet(sim.bnd.bc[i])
+                    linestyle := :solid
+                elseif isNeumann(sim.bnd.bc[i])
+                    linestyle := :dash
                 end
-                x_t, y_t, permutedims(by.(ψ))
+                if !isNone(sim.bnd.bl[i])
+                    if isPMLout(sim.bnd.bl[i])
+                        fill_color = :red
+                    elseif isPMLin(sim.bnd.bl[i])
+                        fill_color = :blue
+                    end
+                    @series begin
+                        subplot := 1
+                        lw := 0
+                        seriestype := :path
+                        # color := fill_color
+                        alpha := .15
+                        fill --> (0,.15,fill_color)
+                        pml_data[i]
+                    end
+                end
+                if isDirichlet(sim.bnd.bc[i]) | isNeumann(sim.bnd.bc[i])
+                    @series begin
+                        subplot := 1
+                        lw := 2
+                        color := :black
+                        seriestype := :path
+                        boundary_data[i]
+                    end
+                end
+            end
+        else
+            if by ∈ [abs, abs2]
+                cmap = cmapk
+                clims --> (0,1)
+            else
+                cmap = cmapc
+                clims --> (-1,1)
+            end
+            if round(Int,N/3)==N/3
+                N_col=3
+                N_row = ceil(Int,N/3)
+            elseif round(Int,N/2)==N/2
+                N_col=2
+                N_row = ceil(Int,N/2)
+            elseif N==1
+                N_col=1
+                N_row=1
+            else
+                N_col = 3
+                N_row = ceil(Int,N/3)
+            end
+            layout --> (N_row,N_col)
+            for i ∈ 1:N
+                ψ = ψ_plot[:,:,i]
+                n₁ = real(sqrt.(ɛ-1im*sim.tls.D₀*F))
+                renorm = (maximum(abs.(ψ)) - minimum(abs.(ψ)))/(maximum(n₁)-minimum(n₁))
+
+                n₁ = n₁ .- minimum(n₁)
+                n₁ = renorm*n₁
+                @series begin
+                    subplot := i
+                    seriestype := :heatmap
+                    seriesalpha := 1.
+                    if by ∈ [abs, abs2]
+                        color := cmapsim1
+                    else
+                        n₁ = n₁ .- maximum(abs.(ψ))
+                        color := cmapsim1
+                    end
+                    x_f, y_f, permutedims(n₁)
+                end
+                @series begin
+                    subplot := i
+                    color := cmap
+                    seriesalpha --> .85
+                    # if by ∈ [abs, abs2]
+                        # println(maximum(by.(ψ)))
+                        # clims --> (0, maximum(by.(ψ)))
+                    # else
+                        # clims --> (-maximum(abs.(ψ)),+maximum(abs.(ψ)))
+                    # end
+                    x_t, y_t, permutedims(by.(ψ./maximum(abs.(ψ))))
+                end
             end
         end
     end
@@ -348,21 +443,22 @@ function prep_data(sim::Simulation{Tsys,Tbnd,Discretization{Cartesian}}, ψ, tru
 
     N, M, X, Y, x_t, y_t, ∂Ω, ψ = apply_truncation(sim, ψ, truncate)
 
-    x_f_start = sim.bnd.∂Ω[1,1]
-    x_f_stop  = sim.bnd.∂Ω[2,1]
+    x_f_start = sim.bnd.∂Ω[1][1]
+    x_f_stop  = sim.bnd.∂Ω[1][2]
     x_f = sim.dis.x[1][:]
 
-    y_f_start = sim.bnd.∂Ω[1,2]
-    y_f_stop  = sim.bnd.∂Ω[2,2]
+    y_f_start = sim.bnd.∂Ω[2][1]
+    y_f_stop  = sim.bnd.∂Ω[2][2]
     y_f = sim.dis.x[2][:]
 
-    x_t_start = ∂Ω[1,1]
-    x_t_stop  = ∂Ω[2,1]
+    x_t_start = ∂Ω[1][1]
+    x_t_stop  = ∂Ω[1][2]
 
-    y_t_start = ∂Ω[1,2]
-    y_t_stop  = ∂Ω[2,2]
+    y_t_start = ∂Ω[2][1]
+    y_t_stop  = ∂Ω[2][2]
 
     ε = sim.sys.ε
+    # ε = (1 .+ 1im*sim.sys.Σe/10).*sim.sys.ε
     F = sim.sys.F
 
     ψ_plot = Array{ComplexF64}(undef, M[1], M[2], N)
@@ -433,6 +529,13 @@ function prep_data(sim::Simulation{Tsys,Tbnd,Discretization{Cartesian}}, ψ, tru
     pml_data3 = (pml_x_3,pml_y_3)
     pml_data4 = (pml_x_4,pml_y_4)
 
+    M[1]==1 ? x_t = y_t : nothing
+    M[1]==1 ? x_f_start = y_f_start : nothing
+    M[1]==1 ? x_f_stop = y_f_stop : nothing
+    M[1]==1 ? x_f = y_f : nothing
+    M[1]==1 ? x_t_start = y_t_start : nothing
+    M[1]==1 ? x_t_stop = y_t_stop : nothing
+
     return (N, x_f_start, x_f_stop, x_f, x_t_start, x_t_stop, x_t[:],
         y_f_start, y_f_stop, y_f, y_t_start, y_t_stop, y_t[:],
         ε, F, ψ_plot,
@@ -486,11 +589,11 @@ function prep_data(sim::Simulation{Tsys,Tbnd,Discretization{Polar}}, ψ, truncat
     y_t_stop  = maximum(Y)+sim.dis.dx[1]/2
     y_t = LinRange(y_t_start, y_t_stop, 2M[1])
 
-    root_r = sqrt.(hypot.(X,Y))
+    # root_r = sqrt.(hypot.(X,Y))
     ψ_temp = Array{ComplexF64}(undef, M[1]+2, M[2]+2)
     ψ_plot = Array{ComplexF64}(undef, 2M[1], 2M[1], N)
     for i ∈ 1:N
-        @views ψ_temp[2:end-1,2:end-1] = reshape(ψ[:,i], M[1], M[2])./root_r
+        @views ψ_temp[2:end-1,2:end-1] = reshape(ψ[:,i], M[1], M[2])#./root_r
         @views ψ_temp[:,1] = ψ_temp[:,end-1]
         @views ψ_temp[:,end] = ψ_temp[:,2]
         @views ψ_temp[1,:] = ψ_temp[2,:]
@@ -587,14 +690,9 @@ Use cases:
 Note: default `fps`=20, and `n`=60, so default movie is 3 seconds long
 """
 function wave(sim::Simulation, ψ; truncate=true, by=real, n=60)
-    if truncate
-        idx = sim.dis.X_idx
-    else
-        idx = 1:prod(sim.dis.N)
-    end
     if 1 ∈ sim.dis.N
-        return imap( ϕ->(sim, exp(-1im*ϕ)*ψ[idx,:], by, 1), 0:2π/n:2π*(1-1/n))
+        return imap( ϕ->(sim, exp(-1im*ϕ)*ψ, by, truncate, 1), 0:2π/n:2π*(1-1/n))
     else
-        return imap( ϕ->(sim, exp(-1im*ϕ)*ψ[idx,:], by, 1, 1), 0:2π/n:2π*(1-1/n))
+        return imap( ϕ->(sim, exp(-1im*ϕ)*ψ, by, truncate, 1, 1), 0:2π/n:2π*(1-1/n))
     end
 end

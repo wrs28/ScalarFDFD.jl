@@ -8,3 +8,5 @@ Project.toml
 README.md
 
 TODO.list
+
+*.mem

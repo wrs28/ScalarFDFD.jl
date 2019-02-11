@@ -1,685 +1,500 @@
 # TODO: check effect of polar coordinates on ihomogeneous systems.
 # TODO: loop over size of M to apply BC's deeper in the interior in order to do photonic crystal waveguides as open boundaries
-# TODO: make polar coordinates available in d=1, which is useful for, say, central-potential scattering
+# TODO: fix gradient
 
-"""
-    module DifferentialOperators
-
-module for building gradient and laplacian in 1 or 2 dimensions subject to either periodic or robin boundary conditions.
-
-For d=2, can specify either cartesian or polar coordinates.
-
-Use `ezbc` to construct boundary conditions easily, or `RobinBoundaryCondition` and `PeriodicBoundaryCondition` for complete control.
-
-`gradient` and `laplacian` give sparse matrices that implement the ∇ and ∇⋅(h∇) operators.
-"""
 module DifferentialOperators
 
-using LinearAlgebra,
-SparseArrays,
-Bravais
+using Bravais,
+BoundaryConditions,
+CoordinateSystems,
+LinearAlgebra,
+SparseArrays
 
-export BoundaryCondition,
-RobinBoundaryCondition,
-PeriodicBoundaryCondition,
-ezbc,
-CoordinateSystem,
-Cartesian,
-Polar,
-gradient,
-laplacian,
-isPolar,
-isCartesian
+import BoundaryConditions: get_dim_side, get_dim, get_side, get_bc_type, reorder, apply_args
 
-# must define here for type stability later
-function ⊗(A,B)
-    kron(A,B)
+export laplacian
+
+
+struct laplacian{DIM,POS} end
+"""
+    laplacian(N, coordinate_system, Δ, bcs[, bls, k, ka, kb, ind]; kwargs...)
+
+    laplacian{DIM}(N, coordinate_system, Δ, bcs[, bls, k, ka, kb, ind]; kwargs...)
+"""
+function laplacian(N, coordinate_system::Type{TCS}, Δ, bcs, bls=ezbl(:n), args...; kwargs...) where TCS<:CoordinateSystem
+    OD1 = define_op{2,1,TCS}(N,Δ,bcs,bls; kwargs...)
+    OD2 = define_op{2,2,TCS}(N,Δ,bcs,bls; kwargs...)
+    ∇₁² = diff_op(OD1,args...)
+    ∇₂² = diff_op(OD2,args...)
+    return sparse(∇₁², ∇₂²), (OD1,OD2)
+end
+function laplacian{DIM}(N, coordinate_system::Type{TCS}, Δ, bcs, bls=ezbl(:n), args...; kwargs...) where {DIM,TCS<:CoordinateSystem}
+    N = DIM==1 ? (N[1],1) : (1,N[2])
+    OD = define_op{2,DIM,TCS}(N,Δ,bcs,bls; kwargs...)
+    ∇² = diff_op(OD,args...)
+    return sparse(∇²), (OD,)
 end
 
-################################################################################
-### BOUNDARY CONDITIONS
-################################################################################
-"""
-    BoundaryCondition
-
-Abstract container for PeriodicBoundaryCondition and RobinBoundaryCondition
-
-See also: [`RobinBoundaryCondition`](@ref), [`PeriodicBoundaryCondition`](@ref)
-"""
-abstract type BoundaryCondition end
+##############################################################################################
+abstract type AbstractPolarity end
+struct Backward<:AbstractPolarity end
+struct Forward<:AbstractPolarity end
+struct Central<:AbstractPolarity end
 
 
-"""
-    pbc = PeriodicBoundaryCondition(N::Array{Int}, dimension, lattice=BravaisLattice())
+struct OperatorDefinition{ORD,DIM,TCS,TBC11,TBC12,TBC21,TBC22,TBL11,TBL12,TBL21,TBL22,TH1,TH2,TF,POL}
+    N::NTuple{2,Int}
+    Δ::NTuple{2,NTuple{2,Float64}}
+    dx::NTuple{2,Float64}
+    x::NTuple{2,LinRange{Float64}}
+    bcs::Tuple{Tuple{TBC11,TBC12},Tuple{TBC21,TBC22}}
+    bls::Tuple{Tuple{TBL11,TBL12},Tuple{TBL21,TBL22}}
+    h::Tuple{Array{TH1,1},Array{TH2,1}}
+    f::NTuple{2,Array{TF,1}}
+    xd::NTuple{2,LinRange{Float64}}
+    hd::Tuple{Array{TH1,1},Array{TH2,1}}
+    fd::NTuple{2,Array{TF,1}}
 
-periodic boundary conditions along `dimension` where the domain is periodic with `lattice`
+    OperatorDefinition{ORD,DIM,CS}(N,Δ,bcs; kwargs...) where {ORD,DIM,CS} = OperatorDefinition{ORD,DIM,CS}(N,_oc_Δ(Δ),_oc_bcs(bcs),((noBL{1,1}(),noBL{1,2}()),(noBL{2,1}(),noBL{2,2}())); kwargs...)
+    OperatorDefinition{ORD,DIM,CS}(N,Δ,bcs,bls; kwargs...) where {ORD,DIM,CS} = OperatorDefinition{ORD,DIM,CS}(N,_oc_Δ(Δ),_oc_bcs(bcs),_oc_bls(bls); kwargs...)
+    function OperatorDefinition{ORD,DIM,CS}(N,Δ::Tuple{Tuple{Float64,Float64},Tuple{Float64,Float64}},bcs::Tuple{Tuple,Tuple},bls::Tuple{Tuple,Tuple}; kwargs...) where {ORD,DIM,CS,TD}
 
-Fields of `pbc` are:
-
-* `lattice`, the Bravais lattice
-
-* `N`, an array of the number of sites in each dimension
-
-* `row_inds`, `col_inds`, `weights` give the location and coefficient of the connection between boundaries
-
-* `shifts_a`, `shifts_b` give the number of dislocations along each of the Bravais vectors necessary to come back to the rectangular unit cell
-
-* `dim` is the dimension along which the periodic condition applies
-
-See also: [`RobinBoundaryCondition`](@ref), [`BoundaryCondition`](@ref),  [`ezbc`](@ref)
-"""
-struct PeriodicBoundaryCondition <: BoundaryCondition
-    lattice::BravaisLattice
-    N::Array{Int,1}
-    row_inds::Array{Int,1}
-    col_inds::Array{Int,1}
-    weights::Array{Float64,1}
-    shifts_a::Array{Int,1}
-    shifts_b::Array{Int,1}
-    dim::Int
-
-    function PeriodicBoundaryCondition(N::Array{Int,1}, dim::Int, lattice::BravaisLattice=BravaisLattice(a = N[1], b = N[2]))
-
-        if 0 ∈ N
-            throw(ArgumentError("improperly initialized N = $N"))
-        end
-
-        a, α, v1 = lattice.a, lattice.α, lattice.v1
-        b, β, v2 = lattice.b, lattice.β, lattice.v2
-
-        width  = a*sin(β-α)/sin(β)
-        height = b*sin(β)
-
-        dx, dy = width/N[1], height/N[2]
-
-        if (dim == 1 && isinf(a)) || (dim == 2 && isinf(b))
-            return new(lattice, N, Array{Int}(undef,0), Array{Int}(undef,0), Array{Float64}(undef,0), Array{Int}(undef,0), Array{Int}(undef,0), dim)
-        elseif !(dim ∈ [1,2])
-            throw(ArgumentError("invalid dimensions $(dim)"))
+        bc1_bool = typeof(bcs[1][1])<:PeriodicBC && typeof(bcs[1][2])<:PeriodicBC
+        bc2_bool = typeof(bcs[2][1])<:PeriodicBC && typeof(bcs[2][2])<:PeriodicBC
+        if (bc1_bool || bc2_bool)
+            lattice = haskey(kwargs,:lattice) ? kwargs[:lattice] : BravaisLattice()
         else
-            nothing
+            lattice = BravaisLattice()
         end
+        a, b, α, β = lattice.a, lattice.b, lattice.α, lattice.β
 
-        if !isinf(a)
-            start, stop = lattice.x0 + min(0, a*sin(β-α)/sin(β)), lattice.x0 + max(0, a*sin(β-α)/sin(β))
-            x = LinRange(start + dx/2, stop - dx/2, N[1])
+        dx1 = !isinf(a) ? a*sin(β-α)/sin(β)/N[1] : (Δ[1][2]-Δ[1][1])/N[1]
+        dx2 = !isinf(b) ?  b*sin(β)/N[2] : (Δ[2][2]-Δ[2][1])/N[2]
+
+        Δ = !isinf(a) ? ((Δ[1][1],Δ[1][1]+a*sin(β-α)/sin(β)),Δ[2]) : Δ
+        Δ = !isinf(b) ? (Δ[1],(Δ[2][1],Δ[2][1]+b*sin(β))) : Δ
+
+        xmin = float.((Δ[1][1],Δ[2][1]))
+        dx = float.((dx1,dx2))
+
+        x1 = LinRange(Δ[1][1]+dx[1]/2,Δ[1][2]-dx[1]/2,N[1])
+        x2 = LinRange(Δ[2][1]+dx[2]/2,Δ[2][2]-dx[2]/2,N[2])
+        x = (x1,x2)
+        x1 = LinRange(Δ[1][1],Δ[1][2],N[1]+1)
+        x2 = LinRange(Δ[2][1],Δ[2][2],N[2]+1)
+        xd = (x1,x2)
+
+        bcs = apply_args(bcs, CS ; N=N, dx=dx, xmin=xmin, lattice=lattice, kwargs...)
+        depth = haskey(kwargs,:depth) ? kwargs[:depth] : 0
+        bls = apply_args(bls; Δ=Δ, depth=depth)
+        h1 = typeof(bls[1])<:Tuple{noBL,noBL} ? zeros(Int,size(x[1])) : 1im*(bls[1][1].(x[1]) + bls[1][2].(x[1]))
+        h2 = typeof(bls[2])<:Tuple{noBL,noBL} ? zeros(Int,size(x[2])) : 1im*(bls[2][1].(x[2]) + bls[2][2].(x[2]))
+        h = (h1,h2)
+        h1 = typeof(bls[1])<:Tuple{noBL,noBL} ? zeros(Int,size(xd[1])) : 1im*(bls[1][1].(xd[1]) + bls[1][2].(xd[1]))
+        h2 = typeof(bls[2])<:Tuple{noBL,noBL} ? zeros(Int,size(xd[2])) : 1im*(bls[2][1].(xd[2]) + bls[2][2].(xd[2]))
+        hd = (h1,h2)
+        f1 = typeof(bls[1])<:Tuple{noBL,noBL} ? zeros(Int,size(x[1])) : 1im*(-reverse(cumsum(bls[1][1].(x[1][end:-1:1]))) + cumsum(bls[1][2].(x[1])))*dx[1]
+        f2 = zeros(Int,size(x[2]))
+        f = (f1,f2)
+        fd1 = typeof(bls[1])<:Tuple{noBL,noBL} ? zeros(Int,size(xd[1])) : 1im*(-reverse(cumsum(bls[1][1].(xd[1][end:-1:1]))) + cumsum(bls[1][2].(xd[1])))*dx[1]
+        fd2 = zeros(Int,size(xd[2]))
+        fd = (fd1,fd2)
+
+        pol = haskey(kwargs,:polarity) ? typeof(kwargs[:polarity]) : (ORD==1 ? Central : Union{})
+
+        tbc11 = typeof(bcs[1][1])
+        tbc12 = typeof(bcs[1][2])
+        tbc21 = typeof(bcs[2][1])
+        tbc22 = typeof(bcs[2][2])
+
+        tbl11 = typeof(bls[1][1])
+        tbl12 = typeof(bls[1][2])
+        tbl21 = typeof(bls[2][1])
+        tbl22 = typeof(bls[2][2])
+
+        return new{ORD,DIM,CS,tbc11,tbc12,tbc21,tbc22,tbl11,tbl12,tbl21,tbl22,eltype(h1),eltype(h2),eltype(f1),pol}(Tuple(N),Δ,dx,x,bcs,bls,h,f,xd,hd,fd)
+    end
+
+    Base.show(io::IO,OD::OperatorDefinition{ORD,DIM,TCS}) where {ORD,DIM,TCS} = print("OperatorDefinition{$ORD,$DIM,$TCS}")
+end
+_oc_Δ(Δ::Array{T,2}) where T = _oc_Δ(((Δ[1,1],Δ[2,1]),(Δ[1,2],Δ[2,2])))
+_oc_Δ(Δ::Array{T,1}) where T = _oc_Δ(((Δ[1],Δ[2]),(Δ[3],Δ[4])))
+_oc_Δ(Δ::Tuple) = _oc_Δ(((Δ[1],Δ[2]),(Δ[3],Δ[4])))
+_oc_Δ(Δ::Tuple{Tuple,Tuple}) = ((float(Δ[1][1]),float(Δ[1][2])),(float(Δ[2][1]),float(Δ[2][2])))
+_oc_Δ(Δ) = Δ
+
+function _oc_bcs(bcs)
+    bcs = reorder(bcs)
+    return ((bcs[1],bcs[2]),(bcs[3],bcs[4]))
+end
+_oc_bcs(bcs::Tuple{Tuple,Tuple}) = bcs
+
+_oc_bls(bls::Tuple) = _oc_bls(bls...)
+function _oc_bls(bl...)
+    bl = length(bl)==0 ? reorder(bl...,noBL{1,1}(),) : reorder(bl)
+    bl = typeof(bl[1])<:AbstractBL{1,1} ? (bl...,) : (noBL{1,1}(),bl...)
+
+    bl = length(bl)==1 ? reorder(bl...,noBL{1,2}(),) : reorder(bl)
+    bl = typeof(bl[2])<:AbstractBL{1,2} ? (bl...,) : (noBL{1,2}(),bl...)
+
+    bl = length(bl)==2 ? reorder(bl...,noBL{2,1}(),) : reorder(bl)
+    bl = typeof(bl[3])<:AbstractBL{2,1} ? (bl...,) : (noBL{2,1}(),bl...)
+
+    bl = length(bl)==3 ? reorder(bl...,noBL{2,2}(),) : reorder(bl)
+    bl = typeof(bl[4])<:AbstractBL{2,2} ? (bl...,) : (noBL{2,2}(),bl...)
+    return ((bl[1],bl[2]),(bl[3],bl[4]))
+end
+_oc_bls(bls::Tuple{Tuple,Tuple}) = bls
+struct define_op{ORD,DIM,CS} end
+
+"""
+    define_op{ORD,DIM,CS}(args...; kwargs...)
+"""
+define_op{ORD,DIM,CS}(args...; kwargs...) where {ORD,DIM,CS} = OperatorDefinition{ORD,DIM,CS}(args...;kwargs...)
+
+##################################################################
+
+struct RowColVal{T}
+    N::NTuple{2,Int}
+    str::NTuple{2,Int}
+    rows::Array{Int,1}
+    cols::Array{Int,1}
+    vals::Array{T,1}
+
+    RowColVal(N,rows,cols,vals) = new{eltype(vals)}(N,Base.size_to_strides(1,N...),rows,cols,vals)
+    RowColVal(N) = new{Union{}}(Tuple(N),Base.size_to_strides(1,N...))
+    RowColVal(N,vec) = new{eltype(vec)}(N,Base.size_to_strides(1,N...),1:prod(N),1:prod(N),vec)
+    function RowColVal(N,vec,dim)
+        vec = dim==1 ? repeat(vec;outer=N[2]) : repeat(vec;inner=N[1])
+        new{eltype(vec)}(N,Base.size_to_strides(1,N...),1:prod(N),1:prod(N),vec)
+    end
+    function (rcv::RowColVal{DIM})(i1, j1, i2, j2, vals) where DIM
+        rows = 1 .+ rcv.str[1]*(i1.-1) + rcv.str[2]*(j1.-1)
+        cols = 1 .+ rcv.str[1]*(i2.-1) + rcv.str[2]*(j2.-1)
+        return new{eltype(vals)}(rcv.N,rcv.str,rows,cols,vals)
+    end
+    RowColVal(N,S::SparseMatrixCSC) = RowColVal(N,findnz(S)...)
+
+    SparseArrays.sparse(rcv::RowColVal) = dropzeros!(sparse(rcv.rows,rcv.cols,rcv.vals,prod(rcv.N),prod(rcv.N),+))
+
+    Base.promote_rule(::Type{RowColVal{T}}, ::Type{RowColVal{U}}) where {T,U} = RowColVal{promote_rule(T,U)}
+    Base.convert(::Type{RowColVal{T}},rcv::RowColVal{U}) where {T,U} = RowColVal(rcv.N,rcv.rows,rcv.cols,convert(Array{T,1},rcv.vals))
+    Base.convert(::Type{RowColVal{T}},rcv::RowColVal{T}) where T = rcv
+end
+
+##################################################################################
+
+struct OperatorConstructor{ORD,DIM,CS,TBL1,TBL2,TBK,TB1,TB2,TOD}
+    N::NTuple{2,Int}
+    Δ::NTuple{2,NTuple{2,Float64}}
+    dx::NTuple{2,Float64}
+    bl1::TBL1
+    bl2::TBL2
+    bulk::RowColVal{TBK}
+    bnd1::Array{RowColVal{TB1},1}
+    bnd2::Array{RowColVal{TB2},1}
+    definition::TOD
+
+    function OperatorConstructor(OD::OperatorDefinition{ORD,DIM,CS,_1,_2,_3,_4,TBL1,TBL2,TBL3,TBL4}) where {ORD,DIM,CS,_1,_2,_3,_4,TBL1,TBL2,TBL3,TBL4}
+        bulk, bnd1, bnd2 = RowColVal(OD.N), [RowColVal(OD.N)], [RowColVal(OD.N)]
+        DIM==1 ? (tbl1,tbl2)=(TBL1,TBL2) : (tbl1,tbl2)=(TBL3,TBL4)
+        return new{ORD,DIM,CS,tbl1,tbl2,Union{},Union{},Union{},typeof(OD)}(OD.N,OD.Δ,OD.dx,OD.bls[DIM][1],OD.bls[DIM][2],bulk,bnd1,bnd2,OD)
+    end
+
+    function (OC::OperatorConstructor{2,DIM,CS,_1,_2,Q,_3,_4,TZ})(args::Vararg{Number,M}) where {M,DIM,CS,_1,_2,_3,_4,Q,TZ}
+        N,Δ,dx,def = OC.N,OC.Δ,OC.dx,OC.definition
+
+        bulk_rows_on_site = 2:N[DIM]-1
+        bulk_rows_nn = 1:N[DIM]-1
+        bnd1_rows = 1
+        bnd2_rows = N[DIM]
+        rows = vcat(bulk_rows_on_site,bulk_rows_nn,bulk_rows_nn.+1,bnd1_rows,bnd2_rows)
+        cols = vcat(bulk_rows_on_site,bulk_rows_nn.+1,bulk_rows_nn,bnd1_rows,bnd2_rows)
+        vals = get_vals(OC,args...)
+
+        if CS<:Polar && DIM==2
+            rf = def.x[1] .+ def.f[1]/args[1]
+            rf⁻² = 1 ./rf.^2
+            S = spdiagm(0=>rf⁻²)
         else
-            x = [lattice.x0]
+            S = DIM==1 ? sparse(1.0*I,N[2],N[2]) : sparse(1.0*I,N[1],N[1])
         end
+        rows,cols,vals = DIM==1 ? findnz(kron(S,sparse(rows,cols,vals,N[1],N[1],+))) : findnz(kron(sparse(rows,cols,vals,N[2],N[2],+),S))
+        rcv = RowColVal(N,rows,cols,vals)
+        return new{2,DIM,CS,_1,_2,eltype(vals),_3,_4,TZ}(OC.N,OC.Δ,OC.dx,OC.bl1,OC.bl2,rcv,OC.bnd1,OC.bnd2,OC.definition)
+    end
 
-        if !isinf(b)
-            start, stop = lattice.y0 + min(0, b*sin(β)), lattice.y0 + max(0, b*sin(β))
-            y = LinRange(start + dy/2, stop - dy/2, N[2])
+    # different dims
+    (OC::OperatorConstructor{ORD,DIM1})(BC::AbstractBC{DIM2},args...) where {ORD,DIM1,DIM2} = OC
+
+    # same dims, side=1
+    function (OC::OperatorConstructor{_1,DIM,CS,_3,_4,_5,_6,_7,_8})(BC::AbstractBC{DIM,1},args...) where {_1,DIM,CS,_3,_4,_5,_6,_7,_8}
+        if typeof(BC)<:PeriodicBC
+            @assert length(args)==4 "only $(length(args)) arguments passed. PeriodicBC necessitates 4 args: k, ka, kb, ind"
+            ind = args[4]
+            i1,j1,i2,j2 = BC.I1[ind],BC.J1[ind],BC.I2[ind],BC.J2[ind]
         else
-            y = [lattice.y0]
+            i1,j1,i2,j2 = BC.I1,BC.J1,BC.I2,BC.J2
         end
-        if dim == 1
-            p1, p2 = bravais_coordinates(x[1]-dx, y, lattice)
+
+        vals = get_vals(OC,BC,args...)
+        rcv = RowColVal(OC.N)
+        rcv = rcv.(i1, j1, i2, j2, vals)
+
+        N = OC.N
+        if CS<:Polar && DIM==2
+            rf = OC.definition.x[1] .+ OC.definition.f[1]/args[1]
+            rf⁻² = 1 ./rf.^2
+            S = kron(sparse(I,N[2],N[2]),spdiagm(0=>rf⁻²))
+            RCV = Array{RowColVal{eltype(S)},1}(undef,length(rcv))
         else
-            p1, p2 = bravais_coordinates(x, y[1]-dy, lattice)
+            S = sparse(I,prod(N),prod(N))
+            RCV = rcv
         end
-
-        Ma, Mb = -floor.(Int, p1/a), -floor.(Int, p2/b)
-        if isinf(a)
-            X = v1[1]*p1 + v2[1]*(p2 + Mb*b)
-            Y = v1[2]*p1 + v2[2]*(p2 + Mb*b)
-        elseif isinf(b)
-            X = v1[1]*(p1 + Ma*a) + v2[1]*p2
-            Y = v1[2]*(p1 + Ma*a) + v2[2]*p2
+        for i ∈ eachindex(rcv)
+            RCV[i] = RowColVal(N,S*sparse(rcv[i]))
+        end
+        return new{_1,DIM,CS,_3,_4,_5,eltype(vals[1]),_7,_8}(OC.N,OC.Δ,OC.dx,OC.bl1,OC.bl2,OC.bulk,RCV,OC.bnd2,OC.definition)
+    end
+    # same dims, side=2
+    function (OC::OperatorConstructor{_1,DIM,CS,_3,_4,_5,_6,_7,_8})(BC::AbstractBC{DIM,2},args...) where {_1,DIM,CS,_3,_4,_5,_6,_7,_8}
+        if typeof(BC)<:PeriodicBC
+            @assert length(args)==4 "only $(length(args)) arguments passed. PeriodicBC necessitates 4 args: k, ka, kb, ind"
+            ind = args[4]
+            i1,j1,i2,j2 = BC.I1[ind],BC.J1[ind],BC.I2[ind],BC.J2[ind]
         else
-            X = v1[1]*(p1 + Ma*a) + v2[1]*(p2 + Mb*b)
-            Y = v1[2]*(p1 + Ma*a) + v2[2]*(p2 + Mb*b)
+            i1,j1,i2,j2 = BC.I1,BC.J1,BC.I2,BC.J2
         end
 
-        Ma += -floor.(Int, X/width)
-        Mb += -floor.(Int, Y/height)
+        vals = get_vals(OC,BC,args...)
+        rcv = RowColVal(OC.N)
+        rcv = rcv.(i1, j1, i2, j2, vals)
 
-        x_inds1 = floor.(Int, X/dx .+ 1/2)
-        x_inds2 = x_inds1 .+ 1
-
-        y_inds1 = floor.(Int, Y/dy .+ 1/2)
-        y_inds2 = y_inds1 .+ 1
-
-        Cx1, Cx2 = abs.(X/dx .+ 1/2 - x_inds2), abs.(X/dx .+ 1/2 - x_inds1)
-        cx1, cx2 = Cx1./(Cx1+Cx2), Cx2./(Cx1+Cx2)
-
-        Cy1, Cy2 = abs.(Y/dy .+ 1/2 - y_inds2), abs.(Y/dy .+ 1/2 - y_inds1)
-        cy1, cy2 = Cy1./(Cy1+Cy2), Cy2./(Cy1+Cy2)
-
-        q, r, s = Array{Int}(undef,2), Array{Int}(undef,2), Array{Float64}(undef,2)
-        t, u, v = Array{Int}(undef,2), Array{Int}(undef,2), Array{Float64}(undef,2)
-        j, k, l = Array{Int}(undef,4), Array{Int}(undef,4), Array{Float64}(undef,4)
-
-        I = Array{Int}(undef, 4N[mod1(dim+1,2)])
-        J = Array{Int}(undef, 4N[mod1(dim+1,2)])
-        V = Array{Float64}(undef, 4N[mod1(dim+1,2)])
-        Na = Array{Int}(undef, 4N[mod1(dim+1,2)])
-        Nb = Array{Int}(undef, 4N[mod1(dim+1,2)])
-
-        for i ∈ 1:N[mod1(dim+1,2)]
-
-            if dim == 1
-                ind_x, ind_y = 1, i
-            else
-                ind_x, ind_y = i, 1
-            end
-
-            q[1], q[2] = ind_x, ind_x
-            r[1], r[2] = mod1(x_inds1[i],N[1]), mod1(x_inds2[i],N[1])
-            s[1], s[2] = cx1[i], cx2[i]
-
-            t[1], t[2] = ind_y, ind_y
-            u[1], u[2] = mod1(y_inds1[i],N[2]), mod1(y_inds2[i],N[2])
-            v[1], v[2] = cy1[i], cy2[i]
-
-            if 1 ∈ N
-                j[1:2], k[1:2], l[1:2] = findnz( sparse(t, u, v, N[2], N[2]) ⊗ sparse(q, r, s, N[1], N[1]) )
-                j[3:4] .= k[3:4] .= 1
-                l[3:4] .= 0
-            else
-                j[:], k[:], l[:] = findnz( sparse(t, u, v, N[2], N[2]) ⊗ sparse(q, r, s, N[1], N[1]) )
-            end
-
-            I[(4(i-1)+1):(4(i-1)+4)] = j
-            J[(4(i-1)+1):(4(i-1)+4)] = k
-            V[(4(i-1)+1):(4(i-1)+4)] = l
-            Na[(4(i-1)+1):(4(i-1)+4)] .= Ma[i]
-            Nb[(4(i-1)+1):(4(i-1)+4)] .= Mb[i]
-        end
-
-        return new(lattice, N, I, J, V, Na, Nb, dim)
-    end
-    function PeriodicBoundaryCondition(N::Int, dim::Int, lattice::BravaisLattice=BravaisLattice(a = dim==1 ? float(N) : Inf, b = dim==2 ? float(N) : Inf))
-        if dim == 1
-            N = [N,1]
+        N = OC.N
+        if CS<:Polar && DIM==2
+            rf = OC.definition.x[1] .+ OC.definition.f[1]/args[1]
+            rf⁻² = 1 ./rf.^2
+            S = kron(sparse(I,N[2],N[2]),spdiagm(0=>rf⁻²))
+            RCV = Array{RowColVal{eltype(S)},1}(undef,length(rcv))
         else
-            N = [1,N]
+            S = sparse(I,prod(N),prod(N))
+            RCV = rcv
         end
-        return PeriodicBoundaryCondition(N, dim, lattice)
-    end
-end # struct PeriodicBoundaryCondition
-
-
-"""
-    rbc = RobinBoundaryCondition(;α,β,p=[0.,0],q=[0.,0],g=[0.,0])
-
-Robin Boundary conditions A*ϕ+B*∇ϕ = G, defaulting to Dirichlet in 1 dim
-
-A = [α[1] p[1]      B = [β[1] q[1]      G = [g[1]
-     p[2] α[2]]          q[2] β[2]]          g[2]]
-"""
-struct RobinBoundaryCondition{T} <: BoundaryCondition
-    α::Array{Array{T,2},1}
-    β::Array{Array{T,2},1}
-    p::Array{Array{T,2},1}
-    q::Array{Array{T,2},1}
-    g::Array{Array{T,1},1}
-    A::Array{T,2}
-    B::Array{T,2}
-    G::Array{T,1}
-
-    function RobinBoundaryCondition(
-        α::Array{Array{T,2},1},
-        β::Array{Array{T,2},1},
-        p::Array{Array{T,2},1},
-        q::Array{Array{T,2},1},
-        g::Array{Array{T,1},1}
-        ) where T <: Number
-
-        A = [α[1] p[1]
-             p[2] α[2]]
-
-        B = [β[1] q[1]
-             q[2] β[2]]
-
-        G = vcat(g[1], g[2])
-
-        return new{T}(α, β, p, q, g, A, B, G)
-    end
-    function RobinBoundaryCondition(α::Array{T,1}, β::Array{Array{T,2},1}, p::Array{Array{T,2},1}, q::Array{Array{T,2},1}, g::Array{Array{T,1},1}) where T<:Number
-        return RobinBoundaryCondition([hcat(α[i],) for i ∈ eachindex(α)], β, p, q, g)
-    end
-    function RobinBoundaryCondition(α, β::Array{T,1}, p::Array{Array{T,2},1}, q::Array{Array{T,2},1}, g::Array{Array{T,1},1}) where T<:Number
-        return RobinBoundaryCondition(α, [hcat(β[i],) for i ∈ eachindex(β)], p, q, g)
-    end
-    function RobinBoundaryCondition(α, β, p::Array{T,1}, q::Array{Array{T,2},1}, g::Array{Array{T,1},1}) where T<:Number
-        return RobinBoundaryCondition(α, β, [hcat(p[i],) for i ∈ eachindex(p)], q, g)
-    end
-    function RobinBoundaryCondition(α, β, p, q::Array{T,1}, g::Array{Array{T,1},1}) where T<:Number
-        return RobinBoundaryCondition(α, β, p, [hcat(q[i],) for i ∈ eachindex(q)], g)
-    end
-    function RobinBoundaryCondition(α, β, p, q, g::Array{T,1}) where T<:Number
-        return RobinBoundaryCondition(α, β, p, q, [[g[i]] for i ∈ eachindex(g)])
-    end
-    function RobinBoundaryCondition(;α,β,
-        p=zeros(Float64,size(α)),
-        q=zeros(Float64,size(α)),
-        g=zeros(Float64,size(α)))
-        return RobinBoundaryCondition(α,β,p,q,g)
-    end
-    function RobinBoundaryCondition(bc::Array{Symbol,1})
-        α = Array{Float64}(undef,2)
-        β = Array{Float64}(undef,2)
-        p = zeros(Float64,2)
-        q = zeros(Float64,2)
-        g = zeros(Float64,2)
-        for j ∈ 1:2
-            if bc[j] == :n
-                α[j] = 0.
-                β[j] = 1.
-            elseif bc[j] == :d
-                α[j] = 1.
-                β[j] = 0.
-            else
-                throw(ArgumentError("unrecognized boundary condition $bc"))
-            end
+        for i ∈ eachindex(rcv)
+            RCV[i] = RowColVal(N,S*sparse(rcv[i]))
         end
-        return RobinBoundaryCondition(α, β, p, q, g)
+        return new{_1,DIM,CS,_3,_4,_5,_6,eltype(vals[1]),_8}(OC.N,OC.Δ,OC.dx,OC.bl1,OC.bl2,OC.bulk,OC.bnd1,RCV,OC.definition)
     end
-    function RobinBoundaryCondition(bc1::Symbol,bc2::Symbol)
-        return RobinBoundaryCondition([bc1,bc2])
-    end
-    function RobinBoundaryCondition(bc::Symbol)
-        return RobinBoundaryCondition([bc,bc])
-    end
-end # struct RobinBoundaryCondition
+
+    Base.show(io::IO,::OperatorConstructor{ORD,DIM,_1,_2,_3,_4,Union{},Union{},Union{}}) where {ORD,DIM,_1,_2,_3,_4} = print("OC{$ORD,$DIM}: 0/3")
+    Base.show(io::IO,::OperatorConstructor{ORD,DIM,_1,_2,_3,_4,TBK,Union{},Union{}}) where {ORD,DIM,_1,_2,_3,_4,TBK} = print("OC{$ORD,$DIM}: 1/3")
+    Base.show(io::IO,::OperatorConstructor{ORD,DIM,_1,_2,_3,_4,Union{},TB1,Union{}}) where {ORD,DIM,_1,_2,_3,_4,TB1} = print("OC{$ORD,$DIM}: 1/3")
+    Base.show(io::IO,::OperatorConstructor{ORD,DIM,_1,_2,_3,_4,Union{},Union{},TB2}) where {ORD,DIM,_1,_2,_3,_4,TB2} = print("OC{$ORD,$DIM}: 1/3")
+    Base.show(io::IO,::OperatorConstructor{ORD,DIM,_1,_2,_3,_4,TBK,TB1,Union{}}) where {ORD,DIM,_1,_2,_3,_4,TBK,TB1} = print("OC{$ORD,$DIM}: 2/3")
+    Base.show(io::IO,::OperatorConstructor{ORD,DIM,_1,_2,_3,_4,TBK,Union{},TB2}) where {ORD,DIM,_1,_2,_3,_4,TBK,TB2} = print("OC{$ORD,$DIM}: 2/3")
+    Base.show(io::IO,::OperatorConstructor{ORD,DIM,_1,_2,_3,_4,Union{},TB1,TB2}) where {ORD,DIM,_1,_2,_3,_4,TB1,TB2} = print("OC{$ORD,$DIM}: 2/3")
+    Base.show(io::IO,::OperatorConstructor{ORD,DIM}) where {ORD,DIM} = print("OC{$ORD,$DIM}: 3/3")
+end
+
+function get_vals(OC::OperatorConstructor{2,DIM,CS,TBL1,TBL2},args::Vararg{Number,M}) where {M,DIM,CS,TD,TBL1,TBL2}
+    N = OC.N
+
+    h = 1 .+ OC.definition.hd[DIM]/args[1]
+    vals = (1 ./h)/OC.dx[DIM]^2
+    bulk_on_site = -(vals[2:end-2] + vals[3:end-1])
+    bnd1_on_site = -(vals[1] + vals[2])
+    bnd2_on_site = -(vals[end-1] + vals[end])
+    bulk_nn = vals[2:N[DIM]]
+    return vcat(bulk_on_site,bulk_nn,bulk_nn,bnd1_on_site,bnd2_on_site)
+end
+function get_vals(OC::OperatorConstructor{2,1,Polar,TBL1,TBL2},args::Vararg{Number,M}) where {M,TD,TBL1,TBL2}
+    DIM=1
+
+    N = OC.N
+
+    r = OC.definition.xd[DIM]
+    rf = r .+ OC.definition.fd[DIM]/args[1]
+    h = 1 .+ OC.definition.hd[DIM]/args[1]
+
+    vals = (rf./h)/OC.dx[DIM]^2
+    bulk_on_site = -(vals[2:end-2] + vals[3:end-1])
+    bnd1_on_site = -(vals[1] + vals[2])
+    bnd2_on_site = -(vals[end-1] + vals[end])
+    bulk_nn = vals[2:N[DIM]]
+    return vcat(bulk_on_site,bulk_nn,bulk_nn,bnd1_on_site,bnd2_on_site)
+end
 
 
-"""
-    bcs = ezbc(bc1, bc2, N=[0,0])
-    bcs = ezbc(bcs, N=[0,0])
-
-wrapper for easy construction of boundary conditions, `bc1` for dimension 1, `bc2` for dimension 2.
-
-`bc1`, `bc2` can by specified as symbols or arrays of symbols. If symbol, it applies to both boundaries in that dimension.
-
-See also: [`RobinBoundaryCondition`](@ref), [`PeriodicBoundaryCondition`](@ref)
-"""
-function ezbc(bc1::Array{Symbol,1},bc2::Array{Symbol,1}, N::Array{Int}=[1,1])
-    if issubset(bc1,[:n, :d])
-        BC1 = RobinBoundaryCondition(bc1[1],bc1[2])
-    elseif bc1 == [:p,:p]
-        BC1 = PeriodicBoundaryCondition(N, 1)
+function get_vals(OC::OperatorConstructor{2,DIM,CS,TBL1,TBL2},BC::T,args...) where {DIM,CS,T<:AbstractLocalBC{DIM,SIDE},TD,TBL1,TBL2} where SIDE
+    @assert (TBL1<:noBL && TBL2<:noBL) || length(args)>0 "pml requires frequency argument. Try with additional argument"
+    weights = BC.weights
+    if CS<:Polar && DIM==1
+        fd = SIDE==1 ? OC.definition.fd[DIM][1] : OC.definition.fd[DIM][end]
+        rf = OC.Δ[DIM][SIDE] .+ fd/args[1]
     else
-        throw(ArgumentError("unrecognized boundary specification $bc1"))
+        rf = 1
     end
-    if issubset(bc2,[:n, :d])
-        BC2 = RobinBoundaryCondition(bc2[1],bc2[2])
-    elseif bc2 == [:p,:p]
-        BC2 = PeriodicBoundaryCondition(N, 2)
+    ind = SIDE==1 ? 1 : OC.N[DIM]
+    hd = 1 .+ OC.definition.hd[DIM][ind]/args[1]
+    return [(rf./hd).*weights[1]/OC.dx[DIM]^2]
+end
+
+function get_vals(OC::OperatorConstructor{2,DIM,CS},BC::PeriodicBC{DIM,SIDE},k::Number,ka::Number,kb::Number,ind::Int) where {DIM,SIDE,CS}
+    @assert !(CS<:Polar && DIM==1) "combination DIM=1, CS=Polar, BC=Periodic not recognized"
+    perp_ind = mod1(ind+1,2)
+    I1, I2, J1, J2 = Int[], Int[], Int[], Int[]
+    vals = ComplexF64[]
+    ns = Int[]
+    for i ∈ eachindex(BC.shifts[perp_ind])
+        I1 = vcat(I1,BC.I1[perp_ind][i])
+        I2 = vcat(I2,BC.I2[perp_ind][i])
+        J1 = vcat(J1,BC.J1[perp_ind][i])
+        J2 = vcat(J2,BC.J2[perp_ind][i])
+        vals = vcat(vals,BC.weights[perp_ind][i])
+        ns = vcat(ns,fill(BC.shifts[perp_ind][i],length(BC.weights[perp_ind][i])))
+    end
+    (K,κ) = ind==1 ? (ka,kb) : (kb,ka)
+    (R,r) = ind==1 ? (BC.lattice.a,BC.lattice.b) : (BC.lattice.b,BC.lattice.a)
+    if !isinf(r)
+        ϕ=κ*r
     else
-        throw(ArgumentError("unrecognized boundary specification $bc2"))
+        ϕ=0.0
     end
-    return (BC1,BC2)
-end
-function ezbc(bc1::Symbol,bc2::Array{Symbol,1}, N::Array{Int}=[0,0])
-    return ezbc([bc1, bc1],bc2, N)
-end
-function ezbc(bc1::Array{Symbol,1},bc2::Symbol, N::Array{Int}=[0,0])
-    return ezbc(bc1, [bc2,bc2], N)
-end
-function ezbc(bc1::Symbol,bc2::Symbol,N::Array{Int})
-    return ezbc([bc1, bc1], [bc2, bc2], N)
+    idx = 1
+    weights = Array{Array{ComplexF64,1},1}(undef,length(BC.shifts[ind]))
+    for i ∈ eachindex(BC.shifts[ind])
+        rng = idx:(idx+length(BC.weights[ind][i])-1)
+        vals[rng] .*= exp.(-1im*ns[rng]*ϕ)
+        weights[i] = vals[rng]
+        idx += length(BC.weights[ind][i])
+    end
+    h = SIDE==1 ? 1 .+ OC.definition.hd[DIM][1]/k : 1 .+ OC.definition.hd[DIM][end]/k
+    for i ∈ eachindex(weights)
+        weights[i] .*= (1/h)/OC.dx[DIM]^2
+    end
+    return weights
 end
 
-function ezbc(bc::Array{Symbol,1}, N::Int=0)
-    if issubset(bc,[:n, :d])
-        return RobinBoundaryCondition(bc)
-    elseif issubset(bc, [:p, :p])
-        return PeriodicBoundaryCondition(N, findfirst(N.!==1))
+function get_vals(OC::OperatorConstructor{2,DIM,CS},BC::MatchedBC{DIM,SIDE},args...) where {DIM,CS,SIDE}
+    vals = Array{Array{ComplexF64,1},1}(undef,length(BC.QNs))
+    weights = BC.weights
+    R = (CS<:Polar && DIM==1) ? OC.Δ[DIM][SIDE] : 1
+    for i ∈ eachindex(vals)
+        vals[i] = R.*weights[i]/OC.dx[DIM]^2
+    end
+    return vals
+end
+
+#######################################################################################
+
+struct DifferentialOperator{TD,TS}
+    N::NTuple{2,Int}
+    d::Array{RowColVal{TD},1}
+    f::Array{Function,1}
+    s::RowColVal{TS}
+
+    DifferentialOperator(d::RowColVal{TD},s::RowColVal{TS},f::TF) where {TD,TS,TF<:Function} = new{TD,TS}(d.N,[d],[f],s)
+    DifferentialOperator(d::Array{RowColVal{TD},1},f::Array{Function,1},s::RowColVal{TS}) where {TD,TS} = new{TD,TS}(d[1].N,d,f,s)
+
+    Base.show(io::IO,DO::DifferentialOperator) = print("Differential Operator")
+
+    Base.vcat(D::DifferentialOperator) = D
+    function Base.vcat(D1::DifferentialOperator{TD1,TS1},D2::DifferentialOperator{TD2,TS2}) where {TD1,TD2,TS1,TS2}
+        @assert D1.N==D2.N "cannot combine Differential Operators with different N, here D1.N=$(D1.N), D2.N=$(D2.N)"
+        d = vcat(D1.d,D2.d)
+        f = vcat(D1.f,D2.f)
+        s = D1.s
+        new{promote_type(TD1,TD2),promote_type(TS1,TS2)}(D1.N,d,f,s)
+    end
+    Base.vcat(D::DifferentialOperator,Ds...) = vcat(D,vcat(Ds...))
+
+    SparseArrays.sparse(DO::DifferentialOperator) = (sparse.(DO.d),DO.f,sparse(DO.s))
+    function SparseArrays.sparse(D1::DifferentialOperator,D2::DifferentialOperator)
+        d1,_,s1 = sparse(D1)
+        d2,_,s2 = sparse(D2)
+        T = promote_type(eltype(d1[1]),eltype(d2[1]))
+        D = Array{SparseMatrixCSC{T,Int64},1}(undef,length(d1)+length(d2))
+        for i ∈ eachindex(d1)
+            D[i] = s2*d1[i]
+        end
+        for i ∈ eachindex(d2)
+            D[length(d1) + i] = s1*d2[i]
+        end
+        return (D,vcat(D1.f,D2.f),s1*s2)
+    end
+end
+
+
+"""
+    diff_op(definition, args...)
+"""
+function diff_op(OD::OperatorDefinition, args...)
+    if !(typeof(OD.bls)<:NTuple{2,NTuple{2,noBL}})
+        @assert length(args)≥1 "must provide at least one argument for PMLs: k"
+    elseif length(args)==0
+        args = (1,)
     else
-        throw(ArgumentError("unrecognized boundary specification $bc"))
+        nothing
     end
-end
-function ezbc(bc1::Symbol,bc2::Symbol, N::Int)
-    return ezbc([bc1,bc2], N)
-end
-function ezbc(bc::Symbol, N::Int=0)
-    return ezbc([bc,bc], N)
+    OC = OperatorConstructor(OD)
+    blk_op = bulk_op(OD,OC,args...)
+    bnd_op = boundary_op(OD,OC,args...)
+    return vcat(blk_op,bnd_op)
 end
 
 
-################################################################################
-####### COORDINATE TYPES
-################################################################################
-abstract type CoordinateSystem end
-struct Polar<:CoordinateSystem end
-struct Cartesian<:CoordinateSystem end
-
-
-################################################################################
-####### GRADIENTS
-################################################################################
 """
-    ∇ = grad(N::Int, dx, bc; polarity=:central, ka=0, kb=0, coordinate_system=:cart)
-
-`bc` can be an instance of `RobinBoundaryCondition` or `PeriodicBoundaryCondition`.
-
-`polarity` is one of `:forward`, `:backward`, or `:central`
-
-`N` is number of lattice sites, `dx` is lattice spacing
-
-See also: [`ezbc`](@ref), [`laplacian`](@ref)
+    bulk_op(definition, args...)
 """
-function grad(N::Int, dx::Real, bc::T; polarity::Symbol=:central, ka::Number=0, kb::Number=0, coordinate_system::U=Cartesian()) where T<:BoundaryCondition where U<:CoordinateSystem
-    ∇ = grad_sans_bc(N, dx, polarity, coordinate_system)
-    ∇, S = grad_apply_bc(∇, [N,1], dx[1], bc, 1, polarity, ka, kb, coordinate_system)
-    return ∇, S
-end # 1d grad
+bulk_op(OD::OperatorDefinition, args...) = bulk_op(OD, OperatorConstructor(OD), args...)
+function bulk_op(OD::OperatorDefinition{ORD,DIM,CS}, OC::OperatorConstructor, args...) where {ORD,DIM,CS}
+    OC = OC(args...) # populate bulk nodes
 
-
-"""
-    ∇₁, ∇₂ =  grad(N::Array{Int}, dx::Array{Float64}, bcs; polarity=:central, ka=0, kb=0, coordinate_system=:cart)
-
-2-dim gradients with `N[1]`, `N[2]` points, lattice spacing `dx[1], dx[2]`
-
-See also: [`ezbc`](@ref), [`laplacian`](@ref)
-"""
-function grad(N::Array{Int}, dx::Array{T}, bcs::Tuple{U,V};
-                polarity::Symbol=:central, ka::Number=0, kb::Number=0, coordinate_system::W=Cartesian()) where T<:Real where U<:BoundaryCondition where V<:BoundaryCondition where W<:CoordinateSystem
-
-    ∇1 = grad_sans_bc(N[1], dx[1], polarity, coordinate_system)
-    ∇2 = grad_sans_bc(N[2], dx[2], polarity, coordinate_system)
-
-    𝕀1, 𝕀2 = sparse(I, N[1], N[1]), sparse(I, N[2], N[2])
-    ∇₁ = 𝕀2 ⊗ ∇1
-    if isPolar(coordinate_system)
-        ∇₂ = ∇2⊗spdiagm(0 => 1 ./(dx[2]*(1/2 .+ (0:N[1]-1))))
-    elseif isCartesian(coordinate_system)
-        ∇₂ = ∇2 ⊗ 𝕀1
+    h = 1 .+ OC.definition.h[DIM]/args[1]
+    if CS<:Polar && DIM==1
+        rf = OC.definition.x[DIM] + OC.definition.f[DIM]/args[1]
+        s = RowColVal(OD.N,rf.*h,DIM)
     else
-        throw(ArgumentError("unrecognized coordinate system $coordinate_system"))
+        s = RowColVal(OD.N,h,DIM)
     end
 
-    ∇₁, S₁ = grad_apply_bc(∇₁, N, dx, bcs, 1, polarity, ka, kb, coordinate_system)
-    ∇₂, S₂ = grad_apply_bc(∇₂, N, dx, bcs, 2, polarity, ka, kb, coordinate_system)
-
-    return ∇₁, ∇₂, S₁, S₂
-end # 2d grad
-
-
-"""
-    grad_sans_bc(N, dx, polarity, coordinate_system)
-"""
-function grad_sans_bc(N::Int, dx::Real, polarity::Symbol, coordinate_system::T) where T<:CoordinateSystem
-    if isCentral(polarity)
-        dx = 2dx
-        I₁, J₁ = Array(2:N), Array(1:N-1)
-        V₁ = fill(-1/dx, N-1)
-        I₂, J₂ = Array(1:N-1), Array(2:N)
-        V₂ = fill(+1/dx, N-1)
-    elseif isForward(polarity)
-        I₁, J₁ = Array(1:N), Array(1:N)
-        V₁ = fill(-1/dx, N)
-        I₂, J₂ = Array(1:N-1), Array(2:N)
-        V₂ = fill(+1/dx, N-1)
-    elseif isBackward(polarity)
-        I₁, J₁ = Array(2:N), Array(1:N-1)
-        V₁ = fill(-1/dx, N-1)
-        I₂, J₂ = Array(1:N), Array(1:N)
-        V₂ = fill(+1/dx, N)
-    end
-    ∇ = sparse(vcat(I₁,I₂), vcat(J₁,J₂), vcat(V₁,V₂), N, N, +)
-    return ∇
-end # grad_sans_bc
-
-
-"""
-    grad_apply_bc(∇, N, dx, bc, dim, polarity, ka, kb, coordinate_system)
-"""
-function grad_apply_bc(∇, N, dx, bc, dim::Int, polarity::Symbol, ka::Number, kb::Number, coordinate_system::T) where T<:CoordinateSystem
-    return apply_bc(∇, :gradient, N, dx, bc, dim, 1, polarity, ka, kb, coordinate_system)
-end # grad_apply_bc
-
-
-################################################################################
-####### LAPLACIANS
-################################################################################
-"""
-    ∇², S = laplacian(N::Array{Int}, dx, bcs::Tuple; ka=0, kb=0, coordinate_system=:cart, h=1)
-
-Compute ∇⋅(`h`∇) on a 1-dim lattice with `N` sites, spacing `dx`, subject to boundary conditions contained in `bc`.
-
-`ka`, `kb` are Floquet phases.
-
-`S` is still experimental, should specify inhomogneous boundary term if there is one specified in `bcs`
-
-See also: [`ezbc`](@ref), [`grad`](@ref)
-"""
-function laplacian(N::Int, dx, bc::BoundaryCondition; ka::Number=0, kb::Number=0, h=1)
-    ∇² = laplacian_sans_bc(N[1], dx[1], h, Cartesian())
-    ∇², S = laplacian_apply_bc(∇², [N[1],1], dx[1], bc, 1, h, ka, kb, Cartesian())
-    return ∇², S
-end # 1d laplacian
-
-
-"""
-    ∇², S = laplacian(N::Array{Int}, dx, bcs::Tuple; ka=0, kb=0, coordinate_system=:cart, h=1)
-
-Compute ∇⋅(`h`∇) on a 2-dim lattice with `N[1]`×`N[2]` sites, spacings `dx[1]`, `dx[2]`, subject to boundary conditions contained in `bcs`.
-
-`ka`, `kb` are Floquet phases, `coordinate_system` specifies cartesian or polar.
-
-`S` is still experimental, should specify inhomogneous boundary term if there is one specified in `bcs`
-
-See also: [`ezbc`](@ref), [`grad`](@ref)
-"""
-function laplacian(N::Array{Int}, dx, bcs::Tuple{U, V};
-            ka::Number=0, kb::Number=0, coordinate_system::W=Cartesian(), h=ones(N...)) where U<:BoundaryCondition where V<:BoundaryCondition where W<:CoordinateSystem
-
-    ∇1² = laplacian_sans_bc(N[1], dx[1], h[:,1], coordinate_system)
-    ∇2² = laplacian_sans_bc(N[2], dx[2], h[1,:], Cartesian())
-    𝕀1, 𝕀2 = sparse(I, N[1], N[1]), sparse(I, N[2], N[2])
-    ∇₁², ∇₂² = 𝕀2 ⊗ ∇1², ∇2² ⊗ 𝕀1
-
-    ∇₁², S1 = laplacian_apply_bc(∇₁², N, dx, bcs, 1, h[:,1], ka, kb, coordinate_system)
-    ∇₂², S2 = laplacian_apply_bc(∇₂², N, dx, bcs, 2, h[1,:], ka, kb, coordinate_system)
-
-    if isPolar(coordinate_system)
-        r⁻² = 𝕀2⊗sparse(1:N[1],1:N[1], 1 ./(dx[1]*(1/2 .+ (0:N[1]-1))).^2, N[1], N[1])
-        ∇₂² = r⁻²*∇₂²
-    end
-
-    return ∇₁² + ∇₂², S1+S2
+    return DifferentialOperator(OC.bulk,s,(a...)->1)
 end
-function laplacian(N::Array{Int}, dx::Real, bcs::Tuple{U, V};
-            ka::Number=0, kb::Number=0, coordinate_system::W=Cartesian(), h=ones(N...)) where U<:BoundaryCondition where V<:BoundaryCondition where W<:CoordinateSystem
-    ∇², S = laplacian(N, [dx, dx], bcs; coordinate_system=coordinate_system, h=h, ka=ka, kb=kb)
-    return ∇², S
-end # 2d laplacian
 
 
 """
-    ∇h∇ = laplacian_sans_bc(N, dx, h, coordinate_system)
+    boundary_op(definition, args...)
 """
-function laplacian_sans_bc(N::Int, dx::Real, h::AbstractArray, coordinate_system::T) where T<:CoordinateSystem
-    I₁, J₁ = Array(2:N), Array(1:N-1)
-    V₁ = +1h[2:end-1]/dx^2
-    if isPolar(coordinate_system)
-        V₁ = ((I₁.-1)./sqrt.((I₁.-1).^2 .- 1/4)).*V₁
-    end
+boundary_op(OD::OperatorDefinition, args...) = boundary_op(OD,OperatorConstructor(OD),args...)
+function boundary_op(OD::OperatorDefinition{ORD,DIM,CS},OC::OperatorConstructor, args...) where {ORD,DIM,CS}
+    OC = OC(OD.bcs[DIM][1],args...)
+    OC = OC(OD.bcs[DIM][2],args...)
+    rcv = vcat(OC.bnd1,OC.bnd2)
 
-    I₂, J₂ = Array(1:N), Array(1:N)
-    V₂ = -(h[1:end-1]+h[2:end])/dx^2
-
-    I₃, J₃, V₃ = J₁, I₁, V₁
-
-    ∇² = sparse(vcat(I₁,I₂,I₃), vcat(J₁,J₂,J₃), vcat(V₁,V₂,V₃), N, N, +)
-    return ∇²
-end
-function laplacian_sans_bc(N::Int, dx::Real, h::Number, coordinate_system::T) where T<:CoordinateSystem
-    return laplacian_sans_bc(N, dx, fill(h,N+1), coordinate_system)
-end # laplacian_sans_bc
-
-
-"""
-    ∇², S = laplacian_apply_bc(∇², N, dx, bc, dim, h, ka, kb, coordinate_system)
-"""
-function laplacian_apply_bc(∇², N, dx, bc::Tuple{T,U}, dim, h, ka, kb, coordinate_system) where T<:BoundaryCondition where U<:BoundaryCondition
-    ∇², S = apply_bc(∇², :laplacian, N, dx, bc, dim, h, :central, ka, kb, coordinate_system)
-    return ∇², S
-end # laplacian_apply_bc
-
-
-########################################################################################
-### APPLICATION OF BOUNDARY CONDITIONS
-########################################################################################
-"""
-    apply_bc(D, operator::Symbol, N::Array, dx::Real, bc<:BoundaryCondition, dim, h, polarity, ka, kb, coordinate_system)
-"""
-function apply_bc(D, operator::Symbol, N::Array{Int,1}, dx::Real, bc::RobinBoundaryCondition, dim::Int, h::AbstractArray{V,1},
-            polarity::Symbol, ka::Number, kb::Number, coordinate_system::T) where V<:Number where T<:CoordinateSystem
-
-    if !all(size(bc.α[1]) .== fill(N[mod1(dim+1,2)],2))
-        A = diagm(0=>vcat(fill(bc.α[1][1],N[mod1(dim+1,2)]),fill(bc.α[2][1],N[mod1(dim+1,2)])))
-    else
-        A = bc.A
-    end
-    if !all(size(bc.β[1]) .== fill(N[mod1(dim+1,2)],2) )
-        B = diagm(0=>vcat(fill(bc.β[1][1],N[mod1(dim+1,2)]),fill(bc.β[2][1],N[mod1(dim+1,2)])))
-    else
-        B = bc.B
-    end
-    if length(bc.g[1]) !== N[mod1(dim+1,2)]
-        G = vcat(fill(bc.g[1][1],N[mod1(dim+1,2)]),fill(bc.g[2][1],N[mod1(dim+1,2)]))
-    else
-        G = bc.G
-    end
-    C = inv(A+B/dx)
-    M = -C*(A-B/dx)
-    S = +2C*G
-
-    if operator==:laplacian
-        dx = dx^2
-        sgn = +1
-        if isPolar(coordinate_system)
-            multiple_inner = 0
-            multiple_outer = (N[1]-1)/sqrt((N[1]-1)^2-1/4)
-            multiple_outer_g = sqrt(dx*(N[1]+1/2))
+    if typeof(OD.bcs[DIM][1])<:PeriodicBC
+        if args[4]==1
+            fs1 = map(x->((k,κ)->OD.bcs[DIM][1](k,κ,args[2],1)[x]),1:length(OC.bnd1))
+            fs2 = map(x->((k,κ)->OD.bcs[DIM][2](k,κ,args[2],1)[x]),1:length(OC.bnd2))
         else
-            multiple_inner=1
-            multiple_outer=1
-            multiple_outer_g=1
+            fs1 = map(x->((k,κ)->OD.bcs[DIM][1](k,args[3],κ,2)[x]),1:length(OC.bnd1))
+            fs2 = map(x->((k,κ)->OD.bcs[DIM][2](k,args[3],κ,2)[x]),1:length(OC.bnd2))
         end
-    elseif operator==:gradient
-        dx = isCentral(polarity) ? 2dx : dx
-        sgn = -1
-        multiple_inner=1
-        multiple_outer=1
-        multiple_outer_g=1
     else
-        throw(ArgumentError("unrecognized differential operator $operator"))
+        fs1 = map(x->(k->OD.bcs[DIM][1](k)[x]),1:length(OC.bnd1))
+        fs2 = map(x->(k->OD.bcs[DIM][2](k)[x]),1:length(OC.bnd2))
+    end
+    fs = vcat(fs1,fs2)
+
+    h = 1 .+ OC.definition.h[DIM]/args[1]
+    if CS<:Polar && DIM==1
+        rf = OC.definition.x[DIM] + OC.definition.f[DIM]/args[1]
+        s = RowColVal(OD.N,rf.*h,DIM)
+    else
+        s = RowColVal(OD.N,h,DIM)
     end
 
-    if dim==1
-        BC  = multiple_inner*sgn*h[1]*M[1:end÷2,1:end÷2]⊗sparse([1], [1], [1/dx], N[1], N[1])
-        BC += sgn*h[1]*M[end÷2+1:end,1:end÷2]⊗sparse([1], [N[1]], [1/dx], N[1], N[1])
-        BC += +h[end]*M[1:end÷2,end÷2+1:end]⊗sparse([N[1]], [1], [1/dx], N[1], N[1])
-        BC += +multiple_outer*h[end]*M[end÷2+1:end,end÷2+1:end]⊗sparse([N[1]], [N[1]], [1/dx], N[1], N[1])
-        BG  = multiple_inner*S[1:end÷2]⊗vcat(sgn/dx,zeros(N[1]-1))
-        BG += multiple_outer*multiple_outer_g*S[end÷2+1:end]⊗vcat(zeros(N[1]-1),1/dx)
-    elseif dim==2
-        BC  = sgn*h[1]*sparse([1], [1], [1/dx], N[2], N[2])⊗M[1:end÷2,1:end÷2]
-        BC += sgn*h[1]*sparse([1], [N[2]], [1/dx], N[2], N[2])⊗M[end÷2+1:end,1:end÷2]
-        BC += +h[end]*sparse([N[2]], [1], [1/dx], N[2], N[2])⊗M[1:end÷2,end÷2+1:end]
-        BC += +h[end]*sparse([N[2]], [N[2]], [1/dx], N[2], N[2])⊗M[end÷2+1:end,end÷2+1:end]
-        BG  = vcat(sgn/dx,zeros(N[2]-1))⊗S[1:end÷2]
-        BG += vcat(zeros(N[2]-1),1/dx)⊗S[end÷2+1:end]
-    else
-        throw(ArgumentError("unrecognized dimension $dim"))
-    end
-    return D + BC, -BG
-end # apply_bc RobinBoundaryCondition
-
-function apply_bc(D, operator::Symbol, N::Array{Int}, dx::Real, bc::PeriodicBoundaryCondition, dim::Int, h::AbstractArray{T,1},
-            polarity::Symbol, ka::Number, kb::Number, coordinate_system::U) where T<:Number where U<:CoordinateSystem
-
-    if operator==:laplacian
-        dx = dx^2
-        sgn = +1
-    elseif operator==:gradient
-        dx = isCentral(polarity) ? 2dx : dx
-        sgn = -1
-    else
-        throw(ArgumentError("unrecognized differential operator $operator"))
-    end
-
-    N, lattice, shifts_a, shifts_b = bc.N, bc.lattice, bc.shifts_a, bc.shifts_b
-    rows, cols, weights = bc.row_inds, bc.col_inds, bc.weights
-
-    if !isinf(lattice.a) && !isinf(lattice.b)
-        ϕ = -shifts_a*ka*lattice.a - shifts_b*kb*lattice.b
-    elseif !isinf(lattice.b)
-        ϕ = -shifts_b*kb*lattice.b
-    elseif !isinf(lattice.a)
-        ϕ = -shifts_a*ka*lattice.a
-    else
-        ϕ = 0
-    end
-    BC = sparse(vcat(rows,cols), vcat(cols,rows), vcat(sgn*weights.*exp.(+1im*ϕ)/dx,+weights.*exp.(-1im*ϕ)/dx), prod(N), prod(N), +)
-    return D + BC, zeros(Float64,size(D,1))
-end # apply_bc PeriodicBoundaryCondition
-
-"""
-    apply_bc(D, operator::Symbol, N::Array, dx::Array, bc::Tuple, dim, h, polarity, ka, kb, coordinate_system)
-"""
-function apply_bc(D, operator, N, dx, bc, dim, h::Number, polarity::Symbol, ka::Number, kb::Number, coordinate_system::T) where T<:CoordinateSystem
-    return apply_bc(D, operator, N, dx, bc, dim, fill(h,N[dim]), polarity, ka, kb, coordinate_system)
-end
-function apply_bc(D, operator::Symbol, N::Array{Int}, dx::Array{U,1}, bc::Tuple{T,S}, dim::Int, h::AbstractArray{V,1},
-            polarity::Symbol, ka::Number, kb::Number, coordinate_system::W) where U<:Real where V<:Number where T<:BoundaryCondition where S<:BoundaryCondition where W<:CoordinateSystem
-    return apply_bc(D, operator, N, dx[dim], bc[dim], dim, h[dim], polarity, ka, kb, coordinate_system)
-end # apply_bc
-
-
-################################################################################################
-### ISS
-################################################################################################
-"""
-    bool = isCartesian(coordinate_system::Symbol)
-"""
-function isCartesian(coordinate_system::Cartesian)
-    return true
-end
-function isCartesian(coordinate_system)
-    return false
+    return DifferentialOperator(rcv, fs, s)
 end
 
-
-"""
-    bool = isPolar(coordinate_system::Symbol)
-"""
-function isPolar(coordinate_system::Polar)
-    return true
-end
-function isPolar(coordinate_system)
-    return false
-end
-
-
-"""
-    bool = isCentral(polarity::Symbol)
-"""
-function isCentral(polarity::Symbol)
-    validNames = [:central, :Central, :center, :Center, :symmetric, :Symmetric, :cen, :Cen, :sym, :Sym, :c, :s, :C, :S]
-    return polarity ∈ validNames
-end
-
-
-"""
-    bool = isBackward(polarity::Symbol)
-"""
-function isBackward(polarity::Symbol)
-    validNames = [:backward, :Backward, :back, :Back, :b, :B, :backwards, :Backwards]
-    return polarity ∈ validNames
-end
-
-"""
-    bool = isForward(polarity::Symbol)
-"""
-function isForward(polarity::Symbol)
-    validNames = [:forward, :Forward, :for, :For, :f, :F, :forwards, :Forwards]
-    return polarity ∈ validNames
-end
 
 end # module

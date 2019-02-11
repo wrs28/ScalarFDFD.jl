@@ -4,17 +4,18 @@
 Rectangular lattice with same size as defined in `bnd` along periodic directions.
 """
 function Bravais.BravaisLattice(bnd::Boundary)
-    if :p ∈ bnd.bc[:,1] && bnd.bc[1,1] == bnd.bc[2,1]
-        a = bnd.∂Ω[2,1]-bnd.∂Ω[1,1]
-    elseif :p ∈ bnd.bc[:,1] && bnd.bc[1,1] !== bnd.bc[2,1]
-        throw(ArgumentError("only one of bc[1,1] and bc[2,1] is :p"))
+    if typeof(bnd.bc[1][1])<:PeriodicBC && typeof(bnd.bc[1][2])<:PeriodicBC
+        a = bnd.∂Ω[1][2]-bnd.∂Ω[1][1]
+    elseif (typeof(bnd.bc[1][1])<:PeriodicBC && !(typeof(bnd.bc[1][2])<:PeriodicBC)) || (typeof(bnd.bc[1][2])<:PeriodicBC && !(typeof(bnd.bc[1][1])<:PeriodicBC))
+        throw(ArgumentError("only one boundary condition along dimension 1 is periodic."))
     else
         a = Inf
     end
-    if :p ∈ bnd.bc[:,2] && bnd.bc[1,2] == bnd.bc[2,2]
-        b = bnd.∂Ω[2,2]-bnd.∂Ω[1,2]
-    elseif :p ∈ bnd.bc[:,2] && bnd.bc[1,2] !== bnd.bc[2,2]
-        throw(ArgumentError("only one of bc[1,2] and bc[2,2] is :p"))
+    if typeof(bnd.bc[2][1])<:PeriodicBC && typeof(bnd.bc[2][2])<:PeriodicBC
+        b = bnd.∂Ω[2][2]-bnd.∂Ω[2][1]
+    elseif (typeof(bnd.bc[2][1])<:PeriodicBC && !(typeof(bnd.bc[2][2])<:PeriodicBC)) || (typeof(bnd.bc[2][2])<:PeriodicBC && !(typeof(bnd.bc[2][1])<:PeriodicBC))
+        throw(ArgumentError("only one boundary condition along dimension 2 is periodic."))
+
     else
         b = Inf
     end
@@ -89,8 +90,12 @@ end
 maps cartesian (`x`,`y`) into pre-allocated cartesian (`xb`,`yb`) unit cell specified by
 domain.lattice
 """
-function Bravais.bravais_coordinates_unit_cell!(xb, yb, x, y, domain::Domain)
-    return bravais_coordinates_unit_cell(xb, yb, x, y, domain.lattice)
+function Bravais.bravais_coordinates_unit_cell!(xb, yb, x, y, domains::Array{Tdom}) where Tdom <: Domain
+    lattices = Array{BravaisLattice}(undef,size(x,1),size(y,2))
+    for i ∈ CartesianIndices(domains)
+        lattices[i] = domains[i].lattice
+    end
+    return bravais_coordinates_unit_cell!(xb, yb, x, y, lattices)
 end
 
 
@@ -100,8 +105,8 @@ end
 maps cartesian (`x`,`y`) into pre-allocated cartesian (`xb`,`yb`) unit cell specified by
 sim.lat
 """
-function Bravais.bravais_coordinates_unit_cell(xb, yb, x, y, sim::Simulation)
-    return bravais_coordinates_unit_cell(xb, yb, x,y,sim.lat)
+function Bravais.bravais_coordinates_unit_cell!(xb, yb, x, y, sim::Simulation)
+    return bravais_coordinates_unit_cell!(xb, yb, x,y,sim.lat)
 end
 
 

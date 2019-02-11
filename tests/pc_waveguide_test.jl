@@ -1,57 +1,62 @@
-# load ScalarFDFD on all process (@everywhere necessary b/c we will use parallel features)
-@startup
+@startup :orange
+push!(LOAD_PATH,"/Users/wrs/wrs julia/ScalarFDFD/src")
+using Revise
+
+## load ScalarFDFD on all process (@everywhere necessary b/c we will use parallel features)
+
 @everywhere using ScalarFDFD
-# define boundary of computation domain Ω:
+
+## define boundary of computation domain Ω:
 ∂Ω = [-8  -8
        9  9]
 
-# and associate boundary conditions with each.
+## and associate boundary conditions with each.
 # Here all share the same, so we just specify a scalar.
 bc = :d         # boundary condition (in this case Dirichlet)
 bl = :pml       # boundary layer (in this case PML)
 bl_depth = 3    # boundary layer depth
 
-# now specify the lattice spacing (i.e. resolution)
+## now specify the lattice spacing (i.e. resolution)
 dx = .05
 
-# now we build the photonic crystal.
-# first initialize the lattice and the pc object
-pc = build_pc_domain(Bravais(a=1, b=1), Regions())
+## now we build the photonic crystal.
+## first initialize the lattice and the pc object
+pc = build_pc_domain(BravaisLattice(a=1, b=1))
 # then add two pillars, whose positions are referenced to the southwest corner of the cell
-pc = add_circle_to_pc(pc, :sw; R=.1, n₁ = 3, x0=.3, y0=.3)
-pc = add_circle_to_pc(pc, :sw; R=.20, n₁ = 3, x0=.7, y0=.7)
+pc = Circle(.5, :center, Dict(:n1=>2), pc)
+pc = Circle(.2, :center, Dict(:n1=>3), pc)
 
-# now take all the definitions and build the various objects necessary for the simulation
+## now take all the definitions and build the various objects necessary for the simulation
 bnd = Boundary(∂Ω=∂Ω, bc=bc, bl=bl, bl_depth=bl_depth)    # boundary object
 dis = Discretization(dx)                                  # discretization object
 sys = System(pc)                                          # system object
 
-# now add waveguides. couldn't do this earlier because the different regions didn't
+## now add waveguides. couldn't do this earlier because the different regions didn't
 # know about each other until we built the "System" object.
 # first we add the vertical waveguide, then the horizontal, each 1-unit cell wide
-sys = add_pc_waveguide(sys; width=1, direction=:vertical)
-sys = add_pc_waveguide(sys; width=1, direction=:horizontal)
+sys = add_pc_waveguide(sys; width=1, direction=:vertical, x0=0, y0=0)
+sys = add_pc_waveguide(sys; width=1, direction=:horizontal, x0=0, y0=0)
 
-# now print the results to see which waveguides correspond to which side
+## now print the results to see which waveguides correspond to which side
 # this is in fact a deterministic recipe, but why bother? we see with the order
 # in which we created these it goes 1: bottom, 2: top, 3: left, 4: right.
 print(sys)
 
-# specify what we define our channels to be. we could have done this before, but
+## specify what we define our channels to be. we could have done this before, but
 # this way we know which waveguides we are referring to. btw the specification is
 # Channel(waveguide_number, quantum_number). In this case, quantum number means
 # transverse mode number. none of this is necessary for eigenproblems, only for
 # scattering problems.
 sct = Scattering([Channels(1,1), Channels(2,1)])
 
-# now we are ready to put the whole simulation together into a neat package!
+## now we are ready to put the whole simulation together into a neat package!
 sim = Simulation(;sys=sys, bnd=bnd, dis=dis, sct=sct)
 
 # to visualize the structure we just made,
 plot(sim)
-savefig("test1/pc_sim1.pdf")
+# savefig("test1/pc_sim1.pdf")
 
-# let's see what frequencies we should be operating at by looking at the band
+## let's see what frequencies we should be operating at by looking at the band
 # structure is. Note we specify parallel to be true, but in face it defaults to
 # checking whether multiple processes are active and responding accordingly
 bands, gaps = band_structure(sim; waveguide=1, zone=1, parallel=true)

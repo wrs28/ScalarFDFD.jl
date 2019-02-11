@@ -1,28 +1,35 @@
 module SimulationDefinition
 
 using Bravais,
-DifferentialOperators,
+CoordinateSystems,
+BoundaryConditions,
+DielectricFunctions,
 Formatting,
 Interpolations,
 IterTools,
-RecipesBase
+RecipesBase,
+Shapes,
+Statistics
 
+import BoundaryConditions: reorder, get_dim, get_side, apply_args
+import DifferentialOperators: _oc_bls
 
-export BravaisLattice,
-Domain,
+export Domain,
 System,
 Discretization,
 Boundary,
 Channels,
 Scattering,
 TwoLevelSystem,
-Simulation
+Simulation,
+which_domain
 
 include("defaults.jl")
 include("simulation_types.jl")
 include("simulation_construction.jl")
 
 include("simulation_overloading.jl")
+include("coordinate_overloading.jl")
 include("bravais_overloading.jl")
 
 include("iss.jl")

@@ -26,7 +26,7 @@ end
     isDefect(domain::Domain))
 """
 function isDefect(domain::Domain)
-    return domain.domain_type ∈ [:defect, :site_defect, :line_defect_simple, :line_defect_periodic, :pc_waveguide]
+    return domain.domain_type ∈ [:defect, :site_defect, :line_defect, :pc_waveguide]
 end
 
 
@@ -57,79 +57,48 @@ end
 """
     isDirichlet(bc)
 """
-function isDirichlet(bc::Symbol)
-    validNames = [:d, :D, :dirichlet, :Dirichlet, :hard, :h]
-    return bc ∈ validNames
-end
+isDirichlet(bc::DirichletBC) = true
+isDirichlet(bc) = false
 
 
 """
     isNeumann(bc)
 """
-function isNeumann(bc::Symbol)
-    validNames = [:n, :N, :neumann, :Neumann, :soft, :s]
-    return bc ∈ validNames
-end
+isNeumann(bc::NeumannBC) = true
+isNeumann(bc) = false
 
 
 """
     isOpen(bc)
 """
-function isOpen(bc::Symbol)
-    validNames = [:o, :open, :Open]
-    return bc ∈ validNames
-end
+isMatched(bc::MatchedBC) = true
+isMatched(bc) = false
 
 
 """
     isPeriodic(bc)
 """
-function isPeriodic(bc::Symbol)
-    validNames = [:p, :periodic, :Periodic, :bloch, :Bloch]
-    return bc ∈ validNames
-end
+isPeriodic(bc::PeriodicBC) = true
+isPeriodic(bc) = false
 
 
 """
     isPMLout(bl)
 """
-function isPMLout(bl::Symbol)
-    validNames = [:pml_out, :PML_OUT, :PML_out, :pml, :PML]
-    return bl ∈ validNames
-end
+isPMLout(bl::PML) = true
+isPMLout(bl) = false
 
 
 """
     isPMLin(bl)
 """
-function isPMLin(bl::Symbol)
-    validNames = [:pml_in, :PML_IN, :PML_in, :pml_conj, :PML_conj]
-    return bl ∈ validNames
-end
-
-
-"""
-    isABSout(bl)
-"""
-function isABSout(bl::Symbol)
-    validNames = [:abs_out, :ABS_OUT, :ABS_out, :abs, :ABS, :amp, :AMP]
-    return bl ∈ validNames
-end
-
-
-"""
-    isABSin(bl)
-"""
-function isABSin(bl::Symbol)
-    validNames = [:abs_in, :ABS_IN, :ABS_in, :abs_conj, :ABS_conj]
-    return bl ∈ validNames
-end
+isPMLin(bl::cPML) = true
+isPMLin(bl) = false
 
 
 """
     isNone(bl)
 """
-function isNone(bl::Symbol)
-    validNames = [:none, :nothing, :empty]
-    return bl ∈ validNames
-end
+
+isNone(bl::noBL) = true
+isNone(bl) = false

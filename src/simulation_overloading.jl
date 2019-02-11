@@ -7,26 +7,26 @@
 New domain structure from old with modified fields
 """
 function Domain(dom::Td;
-    is_in_domain = is_in_domain,
-    domain_params = domain_params,
-    domain_type = domain_type,
-    domain_ε = domain_ε,
-    domain_F = domain_F,
-    is_in_subdomain = is_in_subdomain,
-    subdomain_params = subdomain_params,
-    subdomain_type = subdomain_type,
-    subdomain_ε = subdomain_ε,
-    subdomain_F = subdomain_F,
-    lattice = lattice,
-    which_asymptote = which_asymptote,
-    which_waveguide = which_waveguide
+    is_in_domain = dom.is_in_domain,
+    domain_params = dom.domain_params,
+    domain_type = dom.domain_type,
+    domain_ε = dom.domain_ε,
+    domain_F = dom.domain_F,
+    is_in_subdomain = dom.is_in_subdomain,
+    subdomain_params = dom.subdomain_params,
+    subdomain_type = dom.subdomain_type,
+    subdomain_ε = dom.subdomain_ε,
+    subdomain_F = dom.subdomain_F,
+    lattice = dom.lattice,
+    which_asymptote = dom.which_asymptote,
+    which_waveguide = dom.which_waveguide
     ) where Td<:Domain
+
     return Domain(;is_in_domain = is_in_domain, domain_params = domain_params, domain_type = domain_type,
             domain_ε = domain_ε, domain_F = domain_F, is_in_subdomain = is_in_subdomain, subdomain_params = subdomain_params,
             subdomain_type = subdomain_type, subdomain_ε = subdomain_ε, subdomain_F = subdomain_F, lattice = lattice,
             which_asymptote = which_asymptote, which_waveguide = which_waveguide)
 end
-
 
 ################################################################################
 ### SYSTEM
@@ -34,11 +34,9 @@ end
 """
     sys = System(domain1, domain2, ...)
 """
-function System(args::Vararg{Td}) where Td<:Domain
+function System(args::Vararg{Domain,N}) where N
     return System(vcat(args...))
 end
-
-
 """
     sys = System(sys)
 
@@ -48,12 +46,13 @@ function System(sys::Ts) where Ts<:System
     return System(sys.domains)
 end
 
-
 ################################################################################
 ### DISCRETIZATION
 ################################################################################
+# get_coordinate_system(dis::Discretization{CS}) where CS<:CoordinateSystem = CS
+
 """
-    dis = Discretization(dx, sub_pixel_num=DEFAULT_SUBSAMPLE_NUMBER, coordinate_system=:cart)
+    dis = Discretization{coordinate_system=Cartesian}(dx[, sub_pixel_num=DEFAULT_SUBSAMPLE_NUMBER])
 
 discretization object for Simulation
 
@@ -61,29 +60,43 @@ discretization object for Simulation
 
 `sub_pixel_num` is the subsampling rate used in sub-pixel smoothing.
 """
-function Discretization(dx::Real, coordinate_system::T=Cartesian(), sub_pixel_num::Int=DEFAULT_SUBSAMPLE_NUMBER, origin=[0.,0.], N=[1,1], dN=[0 0;0 0]) where T<:CoordinateSystem
-    return Discretization([dx,dx], coordinate_system, sub_pixel_num, origin, N, dN)
-end
-function Discretization(dx::Array, coordinate_system::T=Cartesian(), sub_pixel_num::Int=DEFAULT_SUBSAMPLE_NUMBER) where T<:CoordinateSystem
-    origin=[0.,0.]; N=[1,1]; dN=[0 0;0 0]
-    return Discretization(dx, coordinate_system, sub_pixel_num, origin, N, dN)
-end
-
-
+Discretization(dx::Union{Number,Array,Tuple}) = Discretization(dx, Cartesian)
+Discretization(dx::Real, coordinate_system::Type{T}, sub_pixel_num::Int=DEFAULT_SUBSAMPLE_NUMBER) where T<:CoordinateSystem = Discretization((dx,dx), coordinate_system, sub_pixel_num, (0.,0.), (1,1), ((0,0),(0,0)))
+Discretization(dx::Union{Array,Tuple}, coordinate_system::Type{T}, sub_pixel_num::Int=DEFAULT_SUBSAMPLE_NUMBER) where T<:CoordinateSystem = Discretization(Tuple(dx), coordinate_system, sub_pixel_num, (0.,0.), (1,1), ((0,0),(0,0)))
 """
     dis = Discretization(dis; key1 => value1, key2 => value2...)
 
 new discretization object from old, with modified fields.
 """
-function Discretization(dis::Discretization; dx=dis.dx, coordinate_system=dis.coordinate_system, sub_pixel_num=dis.sub_pixel_num)
-    return Discretization(dx, coordinate_system, sub_pixel_num, [0., 0.], [1,1], [0 0;0 0])
-end
-
-
+Discretization(dis::Discretization{CS}; dx=dis.dx, coordinate_system=CS, sub_pixel_num=dis.sub_pixel_num) where CS = Discretization(dx, coordinate_system, sub_pixel_num, (0.,0.), (1,1), ((0,0),(0,0)))
 
 ################################################################################
 ### BOUNDARY
 ################################################################################
+Boundary(∂Ω, bcls...) = Boundary(_bnd_Ω(∂Ω),_bnd_bcls(bcls)...)
+
+_bnd_Ω(∂Ω::NTuple{2,NTuple{2,Number}}) = ∂Ω
+_bnd_Ω(∂Ω::NTuple{4,Number}) = ( (∂Ω[1],∂Ω[2]), (∂Ω[3],∂Ω[4]) )
+_bnd_Ω(∂Ω::Array{T,1}) where T<:Number = ( (∂Ω[1],∂Ω[2]), (∂Ω[3],∂Ω[4]) )
+_bnd_Ω(∂Ω::Array{Array{T,1},1}) where T<:Number = ( (∂Ω[1][1],∂Ω[1][2]), (∂Ω[2][1],∂Ω[2][2]) )
+_bnd_Ω(∂Ω::Array{T,2}) where T<:Number = ( (∂Ω[1,1],∂Ω[1,2]), (∂Ω[2,1],∂Ω[2,2]) )
+
+_bnd_bcls(bcs::NTuple{2,Tuple},bls::NTuple{2,Tuple}) = (bcs,bls)
+_bnd_bcls(bcs::Tuple,bls::NTuple{2,Tuple}) = _bnd_bcls(bcs,bls...)
+_bnd_bcls(bcs::NTuple{2,Tuple},bls::Tuple) = _bnd_bcls(bcs...,bls)
+_bnd_bcls(x::Tuple,y::Tuple,bcls::Vararg{Tuple,N}) where N = _bnd_bcls((x...,y...),bcls...)
+_bnd_bcls(bcls::Tuple) = _bnd_bcls(bcls...)
+function _bnd_bcls(bcls::Vararg{Union{AbstractBC,AbstractBL},N}) where {N}
+     bcs = bcls[map(<:, typeof.(bcls), fill(AbstractBC,N))]
+     @assert length(bcs)==4 "insufficient number of boundaries ($(length(bcs))) specified"
+     bcs = reorder(bcs)
+
+     bls = bcls[map(<:, typeof.(bcls), fill(AbstractBL,N))]
+     bls = _oc_bls(bls)
+     bls = reorder(bls)
+
+     return ( (bcs[1],bcs[2]), (bcs[3],bcs[4]) ), ( (bls[1],bls[2]), (bls[3],bls[4]) )
+end
 """
     bnd = Boundary(;∂Ω, bc=:d, bl=:none, bl_depth=0)
 
@@ -96,48 +109,45 @@ boundary object for Simulation.
 `bl` scalar or array of boundary layer types
 
 `bl_depth` scalar or array of boundary layer depths
-"""
-function Boundary(;∂Ω=fill(NaN,2,2), bc=:d, bl=:none, bl_depth=0, r::Real=NaN)
+# """
+function Boundary(;∂Ω=fill(NaN,4), bc::Type=DirichletBC, bl=noBL, depth::Real=0, r::Real=NaN)
     if !isnan(r)
-        @assert typeof(bc)<:Symbol "type of bc is $(typeof(bc)). when radius is specified, bc must be Symbol"
-        @assert typeof(bl)<:Symbol "type of bl is $(typeof(bl)). when radius is specified, bl must be Symbol"
-        @assert typeof(bl_depth)<:Number "type of bl_depth is $(typeof(bl_depth)). when radius is specified, bl_depth must be Number"
-        ∂Ω = [0   0
-              r  2π]
-        bc = [:d :p
-              bc :p]
-        bl = [:none :none
-              bl    :none]
-        bl_depth = [0        0
-                    bl_depth 0]
+# #         @assert typeof(bc)<:Symbol "type of bc is $(typeof(bc)). when radius is specified, bc must be Symbol"
+# #         @assert typeof(bl)<:Symbol "type of bl is $(typeof(bl)). when radius is specified, bl must be Symbol"
+# #         @assert typeof(bl_depth)<:Number "type of bl_depth is $(typeof(bl_depth)). when radius is specified, bl_depth must be Number"
+        ∂Ω = (0, r, 0, 2π)
+        BCs = ( DirichletBC{1,1}(), bc{1,2}(), PeriodicBC{2,1}(BravaisLattice(b=2π)), PeriodicBC{2,2}(BravaisLattice(b=2π)) )
+        BLs = ( noBL{1,1}(0), bl{1,2}(depth), noBL{2,1}(0), noBL{2,2}(0) )
+    else
+        if bc == DirichletBC
+            BCs = (DirichletBC{1,1}(),DirichletBC{1,2}(),DirichletBC{2,1}(),DirichletBC{2,2}())
+        elseif bc == NeumannBC
+            BCs = (NeumannBC{1,1}(),NeumannBC{1,2}(),NeumannBC{2,1}(),NeumannBC{2,2}())
+        elseif bc == PeriodicBC
+            BCs = (PeriodicBC{1,1}(),PeriodicBC{1,2}(),PeriodicBC{2,1}(),PeriodicBC{2,2}())
+        else
+            throw(ArgumentError("$(bc) incompatible with this wrapper signature of Boundary. For more control, use another signature"))
+        end
+
+        if bl == PML
+            BLs = (PML{1,1}(depth),PML{1,2}(depth),PML{2,1}(depth),PML{2,2}(depth))
+        elseif bl == cPML
+            BLs = (cPML{1,1}(depth),cPML{1,2}(depth),cPML{2,1}(depth),cPML{2,2}(depth))
+        elseif bl == noBL
+            BLs = (noBL{1,1}(),noBL{1,2}(),noBL{2,1}(),noBL{2,2}())
+        else
+            throw(ArgumentError("unrecognized bl $(bl)"))
+        end
     end
-    return Boundary(∂Ω, bc, bl, bl_depth)
-end
-function Boundary(∂Ω,
-        bc::Symbol, bl::Array{Symbol,2}, bl_depth::Array{T,2}) where T
-    return Boundary(∂Ω, fill(bc,2,2), bl, bl_depth)
-end
-function Boundary(∂Ω, bc,
-        bl::Symbol, bl_depth::Array{T,2}) where T
-    return Boundary(∂Ω, bc, fill(bl,2,2), bl_depth)
-end
-function Boundary(∂Ω, bc, bl,
-    bl_depth::Number)
-    return Boundary(∂Ω, bc, bl, fill(bl_depth,2,2))
-end
 
-
+    return Boundary(∂Ω, BCs..., BLs...)
+end
 """
     bnd = Boundary(bnd; :key1 => value1, :key2 => value2, ...)
 
 new boundary object from old, with modified fields.
 """
-function Boundary(bnd::Boundary; ∂Ω=bnd.∂Ω, bc=bnd.bc,
-            bl=bnd.bl, bl_depth=bnd.bl_depth)
-    return Boundary(∂Ω, bc, bl, bl_depth)
-end
-
-
+Boundary(bnd::Boundary; ∂Ω=bnd.∂Ω, bc=bnd.bc, bl=bnd.bl) = Boundary(∂Ω, bc, bl)
 
 ################################################################################
 ### CHANNELS
@@ -147,33 +157,22 @@ end
 
 new channel object from old with modified fields.
 """
-function Channels(chn::Channels; waveguide=chn.waveguide, quantum_number=chn.quantum_number)
-    return Channels(waveguide, quantum_number)
-end
-
-
+Channels(chn::Channels; waveguide=chn.waveguide, quantum_number=chn.quantum_number) = Channels(waveguide, quantum_number)
 
 ################################################################################
 ### SCATTERING
 ################################################################################
-function Scattering(channel::Channels)
-    return Scattering([channel])
-end
+Scattering(channel::Channels) = Scattering([channel])
 """
     sct = Scattering(sct; :key1 => value1, :key2 => value2, ...)
 
 new scattering object from old with modified fields.
 """
-function Scattering(sct::Scattering; channels=sct.channels)
-    return Scattering(channels)
-end
-
+Scattering(sct::Scattering; channels=sct.channels) = Scattering(channels)
 """
     sct = Scattering(channel1, channel2, ...)
 """
-function Scattering(args::Vararg{Channels})
-    return Scattering(vcat(args...))
-end
+Scattering(args::Vararg{Channels}) = Scattering(vcat(args...))
 
 ################################################################################
 ### TWOLEVELSYSTEM
@@ -183,96 +182,50 @@ end
 
 new tls object from old, with modified fields
 """
-function TwoLevelSystem(tls::TwoLevelSystem; D₀=tls.D₀, k₀=tls.k₀, γp=tls.γp, ω₀=tls.ω₀)
-        TwoLevelSystem(tls.D₀, tls.k₀, tls.γp, tls.ω₀)
-end
-
+TwoLevelSystem(tls::TwoLevelSystem; D₀=tls.D₀, k₀=tls.k₀, γp=tls.γp, ω₀=tls.ω₀) = TwoLevelSystem(tls.D₀, tls.k₀, tls.γp, tls.ω₀)
 
 ################################################################################
 ### SIMULATION
 ################################################################################
 """
-    sim = Simulation(domain; bnd=Boundary(bc=:p), dis, sct, tls, Na=1, Nb=1)
-
-Simulation from a single domain.
-
-Intended for case where `domain` has a finite lattice structure, in which case
-    it defines the simulation to be `Na`×`Nb` unit cells.
-
-Care must be taken with boundary layer specifications. It is recommended that
-`bnd` be left unspecified.
-"""
-function Simulation(dom::Domain; bnd::Boundary=Boundary(bc=:p), dis::Discretization, sct::Scattering=Scattering(), tls::TwoLevelSystem=TwoLevelSystem(), Na=1, Nb=1)
-    lattice = dom.lattice
-    bnd = deepcopy(bnd)
-    if !isinf(lattice.a)
-        bnd.bc[:,1] .= :p
-        bnd.∂Ω[1,1] = lattice.x0
-        bnd.∂Ω[2,1] = lattice.x0+Na*lattice.a*(cos(lattice.α)-sin(lattice.α)*cot(lattice.β))
-    end
-    if !isinf(lattice.b)
-        bnd.bc[:,2] .= :p
-        bnd.∂Ω[1,2] = lattice.y0
-        bnd.∂Ω[2,2] = lattice.y0+Nb*lattice.b*sin(lattice.β)
-    end
-    return deepcopy(Simulation(sys=System(dom); bnd=Boundary(bnd), dis=dis, tls=tls, lat=BravaisLattice(lattice; :a=>Na*lattice.a, :b=>Nb*lattice.b)))
-end
-
-
-"""
-    sim = Simulation(domain, sim; Na=1, Nb=1)
-
-Build simulation out of a single `domain`, with fields other than `bnd` the same
-as in `sim`, except it is `Na`×`Nb` unit cells.
-
-Intended for case where `domain` has a finite lattice structure.
-"""
-function Simulation(dom::Domain, sim::Simulation; Na=1, Nb=1)
-    return deepcopy(Simulation(dom; dis=sim.dis, tls=sim.tls, Na=Na, Nb=Nb))
-end
-
-
-"""
-    sim = Simulation(domain_num, sim; Na=1, Nb=1)
-
-Build simulation out of domain number `domain_num`, with fields other than `bnd`
-the same as in `sim`, except it is `Na`×`Nb` unit cells.
-
-Intended for case where specified domain has a finite lattice structure.
-"""
-function Simulation(domain_num::Int, sim::Simulation; Na=1, Nb=1)
-    return deepcopy(Simulation(sim.sys.domains[domain_num]; dis=sim.dis, tls=sim.tls, Na=Na, Nb=Nb))
-end
-
-
-"""
     sim = Simulation(sim; key1 => val1, key2 => val2, ...)
 
 new simulation object from old, with modified fields.
 """
-function Simulation(sim::Simulation; sys=sim.sys, bnd=sim.bnd, dis=sim.dis, sct=sim.sct, tls=sim.tls, lat=sim.lat, disp_opt=false)
-    return deepcopy(Simulation(sys=System(sys), bnd=Boundary(bnd), dis=Discretization(dis),
-            sct=Scattering(sct), tls=TwoLevelSystem(tls), lat=BravaisLattice(lat), disp_opt=disp_opt))
+find_type(t::Type{T},x::T,y...) where T = x
+find_type(t::Type{T},x, y...) where T = find_type(t,y...)
+find_type(::Type{T},x) where T = nothing
+function Simulation(args::Vararg{Any,N}; kwargs...) where N
+    types = typeof.(args)
+    simargs = ()
+
+    bnd_ind = findfirst(map(<:,types,fill(Boundary,N)))
+    @assert !isnothing(bnd_ind) throw(ArgumentError("must specify boundary"))
+    bnd = find_type(Boundary,args...)
+    simargs = (simargs..., bnd)
+
+    dis_ind = findfirst(map(<:,types,fill(Discretization,N)))
+    @assert !isnothing(dis_ind) throw(ArgumentError("must specify discretization"))
+    dis = find_type(Discretization,args...)
+    simargs = (simargs..., dis)
+
+    sys = find_type(System,args...)
+    sys = isnothing(sys) ? Scattering() : sys
+    simargs = (simargs..., sys)
+
+    sct = find_type(Scattering,args...)
+    sct = isnothing(sct) ? Scattering() : sct
+    simargs = (simargs..., sct)
+
+    tls = find_type(TwoLevelSystem,args...)
+    tls = isnothing(tls) ? TwoLevelSystem() : tls
+    simargs = (simargs..., tls)
+
+    lat = find_type(BravaisLattice,args...)
+    lat = isnothing(lat) ? BravaisLattice(bnd) : lat
+    simargs = (simargs..., lat)
+
+    return Simulation(simargs...;kwargs...)
 end
 
-
-"""
-    isCartesian(sim)
-"""
-function DifferentialOperators.isCartesian(sim::Simulation)
-    return isCartesian(sim.dis)
-end
-function DifferentialOperators.isCartesian(sim::Discretization)
-    return isCartesian(dis.coordinate_system)
-end
-
-
-"""
-    isPolar(sim)
-"""
-function DifferentialOperators.isPolar(sim::Simulation)
-    return isPolar(sim.dis)
-end
-function DifferentialOperators.isPolar(dis::Discretization)
-    return isPolar(dis.coordinate_system)
-end
+Simulation(sim::Simulation; sys=sim.sys, bnd=sim.bnd, dis=sim.dis, sct=sim.sct, tls=sim.tls, lat=sim.lat, disp_opt=false) = deepcopy(Simulation(sys=System(sys), bnd=Boundary(bnd), dis=Discretization(dis), sct=Scattering(sct), tls=TwoLevelSystem(tls), lat=BravaisLattice(lat), disp_opt=disp_opt))

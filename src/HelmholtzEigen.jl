@@ -1,77 +1,242 @@
 module HelmholtzEigen
 
-using ArnoldiHelper,
-Arpack,
-ArnoldiMethod,
-DifferentialOperators,
-LinearAlgebra,
-SparseArrays
-
 export eig_kl,
 eig_cf
 
+using SimulationDefinition,
+HelmholtzEigenBase
 
-"""
-    k, ψ =  eig_kl(N, dx, ρ, k, bcs; nk=1, ka=0, kb=0, coordinate_system=:cart, h=1)
-
-number of lattice sites `N`, lattice spacing `dx`, density function `ρ`, boundary conditions `bcs` (see `DifferentialOperators.ezbc`),
-number of frequencies `nk`, Floquet/Bloch wavenumbers `ka`,`kb`.
-"""
-function eig_kl(N::Array{Int,1},
-                dx::Array{Float64,1},
-                ρ::Array{Tρ,2},
-                k::Number,
-                bcs::Tuple{Tbc1,Tbc2};
-                nk::Int=1,
-                ka::Number=0,
-                kb::Number=0,
-                coordinate_system::Tcs=Cartesian(),
-                h::Array{Th,2}=ones(size(ρ,1)+1, size(ρ,2)+1)
-                ) where Tρ<:Number where Tbc1<:BoundaryCondition where Tbc2<:BoundaryCondition where Th<:Number where Tcs<:CoordinateSystem
-
-    ∇², S = laplacian(N, dx, bcs; ka=ka, kb=kb, coordinate_system=coordinate_system, h=h)
-    decomp, history = partialschur(shift_and_invert(∇², spdiagm(0=>-ρ[:]), k^2, diag_inv_B=true), nev=nk)
-    history.converged ? nothing : @warn "incomplete convergence: only $(h.nconverged) of $(h.nev) evecs converged"
-    k², ψ = k^2 .+ 1 ./decomp.eigenvalues, decomp.Q
-    for i ∈ 1:nk
-        𝒩² = sum(abs2.(ψ[:,i].*ρ[:]))*(isinf(dx[1]) ? 1 : dx[1])*(isinf(dx[2]) ? 1 : dx[2])
-        @views ψ[:,i] = ψ[:,i]/sqrt(𝒩²)/exp(complex(0,angle(ψ[end÷2,i])))
-    end
-    return sqrt.(k²), convert(Array,ψ)
-end
+HelmholtzEigenBase.eig_kl(sim::Simulation, k; kwargs...) = eig_kl(sim.sys.ε, sim.dis.N, sim.bnd.∂Ω, sim.dis.dx, sim.dis.coordinate_system, sim.bnd.bc, sim.bnd.bl, k; kwargs...)
 
 
-"""
-    η, u =  eig_cf(N, dx, ρ, k, bcs; nk=1, ka=0, kb=0, coordinate_system=:cart, h=1)
 
-`F` and `ρ` must be of the same size.
-"""
-function eig_cf(N::Array{Int,2},
-                dx::Array{Float64,1},
-                ρ::Array{Tρ,2},
-                F::Array{Tf,2},
-                k::Number,
-                bcs::Tuple{Tbc1,Tbc2};
-                η::Number=0,
-                ncf::Int=1,
-                ka::Number=0,
-                kb::Number=0,
-                coordinate_system::Symbol=:cart,
-                h::Array{Th,2}=ones(size(ρ,1)+1, size(ρ,2)+1)
-                ) where Tρ<:Number where Tf<:Number where Tbc1<:BoundaryCondition where Tbc2<:BoundaryCondition where Th<:Number
+# """
+# Linear Eigenvalue Solvers:
+#     freqs, ψ = eig_k(sim, k, nk=1; ka=0, kb=0, F=[1], ψ_init=[], is_linear=true)
+#     freqs, ψ = eig_k(sim, k, k_type::Symbol, nk=1; direction=[1,1], ka=0, kb=0, F=[1], ψ_init=[], is_linear=true)
+#
+# Nonlinear Eigenvalue Solvers:
+#     freqs, ψ = eig_k(sim, k;  ka=0, kb=0, η_init=0, F=[1], ψ_init=[], is_linear=false)
+#     freqs, ψ = eig_k(sim, k, k_type::Symbol, nk=1, radii=(.1,.1); direction=[1,1], ka=0, kb=0, F=[1], ψ_init=[], Nq=100, is_linear=false)
+#
+# Outputs:
+#
+# - `freqs` = `freqs`[# of poles/zeros/etc]
+#
+# - `ψ` = `ψ`[cavity size, # of poles]
+#
+#
+# Inputs (both linear and nonlinear):
+#
+# - `k` is the frequency anchor, and those solutions closest to it are found
+#
+# - `k_type` ∈ [:Z,:Zero,:z,:zero,:P,:Pole,:p,:pole,:UZR,:uzr,:U,:u]
+#
+# - `nk` is the number of modes to be computed (default to 1), and may be ommitted.
+# When doing a nonlinear solve, the CF root-finding method does not take this argument.
+#
+# - `ka`, `kb` are the bloch wavenumbers along each lattice vector
+# (doesn't matter unless at least one direction has periodic boundary conditions)
+#
+# - `F` is an array which multiplies the bare pump profile defined in `sim`. This
+# is an easy way to include hole-burning.
+#
+# - `ψ_init` is a vector which can seed the Arnoldi algorithm, in principle it is
+# useful for speeding up calculations if you know something near the solution. In
+# practice this has very little effect.
+#
+#
+# Nonlinear Inputs:
+#
+# - `radii` are the axes of the elliptical contour
+#
+# - `Nq` is the number of quadrature points along contour
+#
+# - `η_init` is the initial guess for CF root-finding
+#
+#
+# Note: Set `D` or `F` to zero to get passive cavity.
+#
+# Linear methods don't account for line-pulling, and only account for open boundaries
+# if either absorbing layers, PML's, or explicitly open boudnary conditions are used.
+# """
+# function eig_k(sim::Simulation, k::Number; ka=0, kb=0, η_init=0,
+#             is_linear=true, k_avoid=[0], disp_opt=false, tol=.5, max_count=15, max_iter=50, args...)
+#     nk=1
+#     if is_linear
+#         k, ψ = eig_kl(sim, k, nk, ka, kb)
+#     else
+#         k, ψ, _ = eig_knl(sim, k, η_init, ka, kb, k_avoid, disp_opt, tol, max_count, max_iter)
+#     end
+#     return k::Array{ComplexF64,1}, ψ::Array{ComplexF64,2}
+# end # straight wrapper linear/CF root-finding
+#
+#
+# # straight wrapper linear/contour
+# function eig_k(sim::Simulation, k::Number, nk::Int, radii=(.1,.1); ka=0, kb=0, is_linear=true,
+#             r_min=.01, Nq=100, rank_tol=1e-8, parallel=nprocs()>1, args...)
+#     if is_linear
+#         k,ψ = eig_kl(sim, k, nk, ka, kb)
+#     else
+#         if parallel
+#             k = eig_knl(sim, k, nk, radii, ka, kb, Nq, rank_tol, r_min)
+#         else
+#             k = eig_knlp(sim, k, nk, radii, ka, kb, Nq, rank_tol, r_min)
+#         end
+#         ψ=fill(complex(NaN,NaN), prod(sim.dis.N), length(k))
+#     end
+#     return k::Array{ComplexF64,1}, ψ::Array{ComplexF64,2}
+# end
+#
+#
+# # k_type linear/CF root-finding
+# function eig_k(sim::Simulation, k::Number, k_type::Symbol; is_linear=true,
+#                 direction::Array{Int,1}=[1,1], ka=0, kb=0, η_init=0, k_avoid=[0], disp_opt=false,
+#                 tol=.5, max_count=15, max_iter=50, args...)
+#
+#     bl_original = set_bl!(sim, k_type, direction)
+#     try
+#         k, ψ = eig_k(sim, k; is_linear=is_linear, ka=ka, kb=kb,
+#                         η_init=η_init, k_avoid=k_avoid, disp_opt=disp_opt, tol=tol,
+#                         max_count=max_count, max_iter=max_iter)
+#         return k, ψ
+#     finally
+#         reset_bl!(sim, bl_original)
+#     end
+# end
+#
+#
+# # k_type linear/contour
+# function eig_k(sim::Simulation, k::Number, k_type::Symbol, nk::Int, radii=(.1,.1);
+#             direction::Array{Int,1}=[1,1], is_linear=true, Nq=100,
+#             ka=0, kb=0, r_min=.01, rank_tol=1e-8, parallel=nprocs()>1, args...)
+#
+#     bl_original = set_bl!(sim, k_type, direction)
+#     try
+#         k, ψ = eig_k(sim, k, nk, radii; is_linear=is_linear,
+#                         Nq=Nq, ka=ka, kb=kb, r_min=r_min, rank_tol=rank_tol, parallel=parallel)
+#         return k, ψ
+#     finally
+#         reset_bl!(sim, bl_original)
+#     end
+# end
 
-    ∇², S = laplacian(N, dx, bcs; ka=ka, kb=kb, coordinate_system=coordinate_system, h=h)
-    ɛk² = spdiagm(0 => ɛ[:]*k^2)
-    Fk² = spdiagm(0 => -F[:]*k^2)
-    decomp, history = partialschur(shift_and_invert(∇²+ɛk², Fk², η), nev=ncf)
-    history.converged ? nothing : @warn "incomplete convergence: only $(h.nconverged) of $(h.nev) evecs converged"
-    η, u = η .+ 1 ./decomp.eigenvalues, decomp.Q
-    for i ∈ 1:ncf
-        𝒩² = sum(u[:,i].*F[:].*conj(u[:,i]))*(isinf(dx[1]) ? 1 : dx[1])*(isinf(dx[2]) ? 1 : dx[2])
-        @views u[:,i] = u[:,i]/sqrt(𝒩²)
-    end
-    return η,  convert(Array,u)
-end
+################################################################################
+#### CF EIGENVALUE SOLVER
+################################################################################
+# """
+#     u, η = eig_cf(sim, k, ncf=1; η=0, ka=0, kb=0)
+#     u, η = eig_cf(sim, k, k_type::Symbol, ncf=1; F=[1], η_init=0, u_init=[], direction=[1,1], ka=0, kb=0)
+#
+# CF eigenvalue solver.
+#
+# - `k` is the frequency
+#
+# - `k_type` ∈ [:Z,:Zero,:z,:zero,:P,:Pole,:p,:pole,:UZR,:uzr,:U,:u]
+#
+# - `ncf` is the number of modes to be computed (default to 1), and may be ommitted.
+#
+# - `ka`, `kb` are the bloch wavenumbers along each lattice vector
+# (doesn't matter unless at least one direction has periodic boundary conditions)
+#
+# - `F` is an array which multiplies the bare pump profile defined in `sim`. This
+# is an easy way to include hole-burning.
+#
+# - `u_init` is a vector which can seed the Arnoldi algorithm, in principle it is
+# useful for speeding up calculations if you know something near the solution. In
+# practice this has very little effect.
+#
+# - `η_init` is the anchor CF eigenvalue, solutions are found which are closest to it.
+# """
+# function HelmholtzEigenBase.eig_cf(sim::Simulation, k::Number, ncf::Int, η::Number, ka::Number=0, kb::Number=0)
+#     return eig_cf(deepcopy(sim.dis.N), deepcopy(sim.dis.dx), (1 .+ 1im*sim.sys.Σe/k).*sim.sys.ε, (1 .+ 1im*sim.sys.Σe/k).*sim.sys.F, k, sim.bnd.BC;
+#             η=η, ncf=ncf, ka=ka, kb=kb, coordinate_system=sim.dis.coordinate_system,
+#             h= 1 ./(1 .+ 1im*sim.sys.Σd/k) )
+# end
+#
+# function HelmholtzEigenBase.eig_cf(sim::Simulation, k::Number, ncf::Int; η::Number=0, ka::Number=0, kb::Number=0)
+#     η, u = eig_cf(sim, k, ncf, η, ka, kb)
+#     return η, u
+# end
+# function HelmholtzEigenBase.eig_cf(sim::Simulation, k::Number, k_type::Symbol, ncf::Int=1; direction::Array{Int,1}=[1,1],
+#                     η::Number=0, ka::Number=0, kb::Number=0)
+#
+#     bl_original = set_bl!(sim, k_type, direction)
+#     try
+#         η, u = eig_cf(sim, k, ncf, η, ka, kb)
+#         return η, u
+#     finally
+#         reset_bl!(sim, bl_original)
+#     end
+# end
+#
+#
+# ################################################################################
+# #### BOUNDARY FIXING FOR WRAPPERS
+# ################################################################################
+# """
+#     set_bl!(sim, k_type, direction)
+# """
+# function set_bl!(sim::Simulation, k_type::Symbol, direction=[])
+#
+#     bl_original = deepcopy(sim.bnd.bl)
+#
+#     if k_type ∈ [:Pole,:pole,:P,:p]
+#         for i ∈ eachindex(sim.bnd.bl)
+#             if sim.bnd.bl[i] == :pml_in
+#                 sim.bnd.bl[i] = :pml_out
+#             elseif sim.bnd.bl[i] == :abs_in
+#                 sim.bnd.bl[i] = :abs_out
+#             end
+#         end
+#     elseif k_type ∈ [:Zero,:zero,:Z,:z]
+#         for i ∈ eachindex(sim.bnd.bl)
+#             if sim.bnd.bl[i] == :pml_out
+#                 sim.bnd.bl[i] = :pml_in
+#             elseif sim.bnd.bl[i] == :abs_out
+#                 sim.bnd.bl[i] = :abs_in
+#             end
+#         end
+#     elseif k_type ∈ [:UZR,:uzr,:U,:u]
+#         for j ∈ 1:2
+#             if direction[j] == +1
+#                 if sim.bnd.bl[1,j] == :pml_out
+#                     sim.bnd.bl[1,j] = :pml_in
+#                 elseif sim.bnd.bl[1,j] == :abs_out
+#                     sim.bnd.bl[1,j] = :abs_in
+#                 end
+#                 if sim.bnd.bl[2,j] == :pml_in
+#                     sim.bnd.bl[2,j] = :pml_out
+#                 elseif sim.bnd.bl[2,j] == :abs_in
+#                     sim.bnd.bl[2,j] = :abs_out
+#                 end
+#             elseif direction[j] == -1
+#                 if sim.bnd.bl[1,j] == :pml_in
+#                     sim.bnd.bl[1,j] = :pml_out
+#                 elseif sim.bnd.bl[1,j] == :abs_in
+#                     sim.bnd.bl[1,j] = :abs_out
+#                 end
+#                 if sim.bnd.bl[2,j] == :pml_out
+#                     sim.bnd.bl[2,j] = :pml_in
+#                 elseif sim.bnd.bl[2,j] == :abs_out
+#                     sim.bnd.bl[2,j] = :abs_in
+#                 end
+#             else
+#                 throw(ArgumentError("invalid direction $direction[j], should be ±1"))
+#             end
+#         end
+#     end
+#     return bl_original
+# end
+#
+#
+# """
+#     reset_bl!(sim, k_type, direction)
+# """
+# function reset_bl!(sim::Simulation, bl_original)
+#     @. sim.bnd.bl = bl_original
+#     return nothing
+# end
 
 
 end # module

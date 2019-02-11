@@ -5,6 +5,7 @@ RecipesBase
 
 export BravaisLattice,
 bravais_coordinates_unit_cell,
+bravais_coordinates_unit_cell!,
 bravais_coordinates
 
 """
@@ -51,18 +52,33 @@ struct BravaisLattice
         new(float(a), float(b), float(α), float(β), float(x0), float(y0),
             sinθ^2, cosθ, R, Rᵀ, v1, v2)
     end
-end # end of struct BravaisLatice
 
+    function Base.show(io::IO, bvl::BravaisLattice)
+        if !get(io, :sub, false)
+            print(io, typeof(bvl), ": \n",
+            "\tprimitive vector 1: ", fmt("3.2f",bvl.a), ", ∠", fmt("3.2f",(mod2pi(bvl.α))*180/pi), "°\n",
+            "\tprimitive vector 2: ", fmt("3.2f",bvl.b), ", ∠", fmt("3.2f",(mod2pi(bvl.β))*180/pi), "°\n",
+            "\torigin: (", fmt("3.2f",bvl.x0), ", ", fmt("3.2f",bvl.y0), ")")
+        elseif !get(io, :sub1, false)
+            print(io,
+            "\n\tprimitive vector 1: ", fmt("3.2f",bvl.a), ", ∠", fmt("3.2f",(mod2pi(bvl.α))*180/pi), "°\n",
+            "\tprimitive vector 2: ", fmt("3.2f",bvl.b), ", ∠", fmt("3.2f",(mod2pi(bvl.β))*180/pi), "°\n",
+            "\torigin: (", fmt("3.2f",bvl.x0), ", ", fmt("3.2f",bvl.y0), ")")
+        else
+            print(io,
+            "\n\t\tprimitive vector 1: ", fmt("3.2f",bvl.a), ", ∠", fmt("3.2f",(mod2pi(bvl.α))*180/pi), "°\n",
+            "\t\tprimitive vector 2: ", fmt("3.2f",bvl.b), ", ∠", fmt("3.2f",(mod2pi(bvl.β))*180/pi), "°\n",
+            "\t\torigin: (", fmt("3.2f",bvl.x0), ", ", fmt("3.2f",bvl.y0), ")")
+        end
+    end
+end # end of struct BravaisLatice
 
 """
     lattice = BravaisLattice(lattice; :key1 => value1, :key2 => value2, ...)
 
 new lattice from old lattice with modified fields.
 """
-function BravaisLattice(lattice::BravaisLattice; a=lattice.a, b=lattice.b, α=lattice.α, β=lattice.β, x0=lattice.x0, y0=lattice.y0)
-    return BravaisLattice(;a=a, b=b, α=α, β=β, x0=x0, y0=y0)
-end
-
+BravaisLattice(lattice::BravaisLattice; a=lattice.a, b=lattice.b, α=lattice.α, β=lattice.β, x0=lattice.x0, y0=lattice.y0) = BravaisLattice(;a=a, b=b, α=α, β=β, x0=x0, y0=y0)
 
 ################################################################################
 # COORDINATE TRANSFORMATIONS
@@ -111,32 +127,49 @@ function bravais_coordinates_unit_cell(x, y, lattices::Array{BravaisLattice})
     return xb, yb
 end
 
-
 """
     xb, yb = bravais_coordinates_unit_cell(x, y, lattice)
 
 maps cartesian (`x`,`y`) into cartesian (`xb`,`yb`) unit cell specified by
 lattice
 """
-function bravais_coordinates_unit_cell!(xb::Array{Float64}, yb::Array, x, y, lattice::BravaisLattice)
+function bravais_coordinates_unit_cell!(xb::Array, yb::Array, x::Array, y::Array, lattice::BravaisLattice)
 
-    P = bravais_coordinates_unit_cell.(x, y, Ref(lattice))
-    @assert size(P)==size(xb) "x-array (first argument) size=$(size(xb)) is not size x×y=$(size(P))"
-    @assert size(P)==size(xb) "y-array (second argument) size=$(size(yb)) is not size x×y=$(size(P))"
-    for i ∈ eachindex(P)
-        xb[i] = P[i][1]
-        yb[i] = P[i][2]
+    @assert size(x,1)==size(xb,1) "x-array (first argument) size=$(size(xb)) inconsistent with size(x)=$(size(x))"
+    @assert size(y,2)==size(xb,2) "y-array (second argument) size=$(size(y)) inconsistent with size(y)=$(size(y))"
+    if size(x)!==size(y)
+        for i ∈ eachindex(x), j ∈ eachindex(y)
+            xb[i,j], yb[i,j] = bravais_coordinates_unit_cell(x[i],y[j],lattice)
+        end
+    else
+        for i ∈ eachindex(x)
+            xb[i], yb[i] = bravais_coordinates_unit_cell(x[i],y[i],lattice)
+        end
     end
     return nothing
 end
+function bravais_coordinates_unit_cell!(xb::Array, yb::Array, x::Array, y::Array, lattice::Array{BravaisLattice})
 
+    @assert size(x,1)==size(xb,1) "x-array (first argument) size=$(size(xb)) inconsistent with size(x)=$(size(x))"
+    @assert size(y,2)==size(xb,2) "y-array (second argument) size=$(size(y)) inconsistent with size(y)=$(size(y))"
+    if size(x)!==size(y)
+        for i ∈ eachindex(x), j ∈ eachindex(y)
+            xb[i,j], yb[i,j] = bravais_coordinates_unit_cell(x[i],y[j],lattice[i,j])
+        end
+    else
+        for i ∈ eachindex(x)
+            xb[i], yb[i] = bravais_coordinates_unit_cell(x[i],y[i],lattice[i])
+        end
+    end
+    return nothing
+end
 
 """
     p1, p2 = bravais_coordinates(x,y,lattice)
 
 coordinates in bravais frame (i.e. (x,y) = p1*v1 + p2*v2)
 """
-function bravais_coordinates(x::T, y::T, lattice::BravaisLattice) where T <: Real
+function bravais_coordinates(x::T1, y::T2, lattice::BravaisLattice) where {T1<:Real,T2<:Real}
     a, b, α, β, v1, v2, x0, y0 = lattice.a, lattice.b, lattice.α, lattice.β, lattice.v1, lattice.v2, lattice.x0, lattice.y0
     if (isinf(a) && iszero(β-π/2)) || (isinf(b) && iszero(α)) || (isinf(a) && isinf(b))
         return float(x-x0), float(y-y0)
@@ -153,9 +186,7 @@ function bravais_coordinates(x::T, y::T, lattice::BravaisLattice) where T <: Rea
     return p1, p2
 end
 function bravais_coordinates(x, y, lattice::BravaisLattice)
-
     P = bravais_coordinates.(x, y, Ref(lattice))
-
     p1 = Array{Float64}(undef, size(P))
     p2 = Array{Float64}(undef, size(P))
     for i ∈ eachindex(P)
@@ -165,7 +196,9 @@ function bravais_coordinates(x, y, lattice::BravaisLattice)
     return p1, p2
 end
 
-
+########################################################################
+### PLOTTING
+########################################################################
 """
     plot(lattice::BravaisLattice, N=[4,4])
 
@@ -200,30 +233,6 @@ If `N` is a scalar, uses same span for both dimensions.
         (x, y)
     end
 end
-@recipe function f(lattice::BravaisLattice, N::Int)
-    lattice, [N,N]
-end
-
-
-# pretty printing of BravaisLattice
-Base.show(io::IO, bvl::BravaisLattice) = begin
-    if !get(io, :sub, false)
-        print(io, typeof(bvl), ": \n",
-        "\tprimitive vector 1: ", fmt("3.2f",bvl.a), ", ∠", fmt("3.2f",(mod2pi(bvl.α))*180/pi), "°\n",
-        "\tprimitive vector 2: ", fmt("3.2f",bvl.b), ", ∠", fmt("3.2f",(mod2pi(bvl.β))*180/pi), "°\n",
-        "\torigin: (", fmt("3.2f",bvl.x0), ", ", fmt("3.2f",bvl.y0), ")")
-    elseif !get(io, :sub1, false)
-        print(io,
-        "\n\tprimitive vector 1: ", fmt("3.2f",bvl.a), ", ∠", fmt("3.2f",(mod2pi(bvl.α))*180/pi), "°\n",
-        "\tprimitive vector 2: ", fmt("3.2f",bvl.b), ", ∠", fmt("3.2f",(mod2pi(bvl.β))*180/pi), "°\n",
-        "\torigin: (", fmt("3.2f",bvl.x0), ", ", fmt("3.2f",bvl.y0), ")")
-    else
-        print(io,
-        "\n\t\tprimitive vector 1: ", fmt("3.2f",bvl.a), ", ∠", fmt("3.2f",(mod2pi(bvl.α))*180/pi), "°\n",
-        "\t\tprimitive vector 2: ", fmt("3.2f",bvl.b), ", ∠", fmt("3.2f",(mod2pi(bvl.β))*180/pi), "°\n",
-        "\t\torigin: (", fmt("3.2f",bvl.x0), ", ", fmt("3.2f",bvl.y0), ")")
-    end
-end
-
+@recipe f(lattice::BravaisLattice, N::Int) = (lattice, [N,N])
 
 end # module

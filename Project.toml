@@ -1,5 +1,5 @@
 name = "ScalarFDFD"
-uuid = "1501fb56-d95b-11e8-28b3-6dc6380aac00"
+uuid = "9b9a6760-2e16-11e9-17f4-29fa885e4df6"
 authors = ["William R Sweeney <wrsweeney2@gmail.com>"]
 version = "0.1.0"
 
