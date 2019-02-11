@@ -91,7 +91,7 @@ end
 function add_pc_waveguide(sys::System; width::Number, direction::Symbol, x0::Number, y0::Number)
     waveguide_number = length(sys.waveguides)+1
     temp_sys = System(sys.domains[.!isWaveguide.([sys.domains[i] for i ∈ eachindex(sys.domains)]) .& .!isBulkWaveguide.([sys.domains[i] for i ∈ eachindex(sys.domains)]) .& .!isDefect.([sys.domains[i] for i ∈ eachindex(sys.domains)]) ])
-    domain = which_domain(x0,y0, Boundary([-Inf Inf;-Inf Inf],:d,:none,0), temp_sys)
+    domain = which_domain(x0,y0, Boundary(∂Ω=[-Inf Inf;-Inf Inf],bc=DirichletBC), temp_sys)
     waveguide_domains = pc_waveguide_domains(temp_sys.domains[domain]; x0=x0, y0=y0, direction=direction, width=width, waveguide_number=waveguide_number)
     return System(vcat(waveguide_domains,sys.domains))
 end

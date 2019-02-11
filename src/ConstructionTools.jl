@@ -9,11 +9,13 @@ site_defect,
 add_halfspace_waveguide,
 add_halfspace_waveguides,
 add_planar_waveguide,
-add_planar_waveguides
+add_planar_waveguides,
+add_pc_waveguide,
+add_pc_waveguides
 
 using ConstructionToolsBase,
 Shapes,
-PhotonicCrystal
-# Waveguides
+PhotonicCrystal,
+Waveguides
 
 end #module

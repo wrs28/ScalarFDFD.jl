@@ -9,6 +9,7 @@ add_pc_waveguide,
 add_pc_waveguides
 
 using Bravais,
+BoundaryConditions,
 Shapes,
 ConstructionToolsBase,
 SimulationDefinition,

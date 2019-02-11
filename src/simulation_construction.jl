@@ -145,7 +145,7 @@ end
     left_domain(x, y, domain_index, bnd, sys)
 """
 function left_domain(x,y,idx::Int,bnd::Boundary,sys::System)
-    return sys.domains[idx].which_asymptote == :left && x<bnd.∂Ω_tr[1,1]
+    return sys.domains[idx].which_asymptote == :left && x<bnd.∂Ω_tr[1][1]
 end
 
 
@@ -153,7 +153,7 @@ end
     right_domain(x, y, domain_index, bnd, sys)
 """
 function right_domain(x,y,idx::Int,bnd::Boundary,sys::System)
-    return sys.domains[idx].which_asymptote == :right && x>bnd.∂Ω_tr[2,1]
+    return sys.domains[idx].which_asymptote == :right && x>bnd.∂Ω_tr[1][2]
 end
 
 
@@ -161,7 +161,7 @@ end
     bottom_domain(x, y, domain_index, bnd, sys)
 """
 function bottom_domain(x,y,idx::Int,bnd::Boundary,sys::System)
-    return sys.domains[idx].which_asymptote == :bottom && y<bnd.∂Ω_tr[1,2]
+    return sys.domains[idx].which_asymptote == :bottom && y<bnd.∂Ω_tr[2][1]
 end
 
 
@@ -169,5 +169,5 @@ end
     top_domain(x, y, domain_index, bnd, sys)
 """
 function top_domain(x,y,idx::Int,bnd::Boundary,sys::System)
-    return sys.domains[idx].which_asymptote == :top && y>bnd.∂Ω_tr[2,2]
+    return sys.domains[idx].which_asymptote == :top && y>bnd.∂Ω_tr[2][2]
 end
