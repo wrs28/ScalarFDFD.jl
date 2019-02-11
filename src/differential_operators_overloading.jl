@@ -1,8 +1,3 @@
-# TODO: open boundaries in laplacians_with_bc
-
-function ⊗(A,B)
-    kron(A,B)
-end
 
 ################################################################################
 ####### GRADIENTS
@@ -452,46 +447,27 @@ function pml_boundary_layers(sim::Simulation, k)
 end
 
 
+
 """
-    s₁, s₂ = σ(bnd, dis)
-
-conductivity for absorbing layer (PML or not) in dimensions 1 and 2.
+    boundary_layers(sim)
 """
-function σ(bnd::Boundary, dis::Discretization)
+function pml_boundary_layers(sim::Simulation, k)
 
-    α = Array{ComplexF64}(undef,2,2)
-    for i ∈ CartesianIndices(α)
-        if bnd.bl[i] !== :none
-            β = 2*sqrt(bnd.bl_depth[i])
-            # α[i] = -(1/4)*(POWER_LAW+1)*exp(complex(0,SCALING_ANGLE))*log(EXTINCTION)/(bnd.bl_depth[i]^(float(POWER_LAW)+1))
-            α[i] = -(1/4)*exp(complex(0,SCALING_ANGLE))*log(EXTINCTION)/bnd.bl_depth[i]/((2exp(β)-β)/(2β*(exp(β)-1))-1/β^2)
-        else
-            α[i] = 0
-        end
-        if bnd.bl[i] ∈ [:abs_in, :pml_in]
-            α[i] = flipsign(conj(α[i]),-1)
-        end
-    end
+    Σ = sim.sys.Σ
+    N = sim.dis.N
 
-    Σ = Array{Array{ComplexF64,1},2}(undef,2,2)
-    for r ∈ CartesianIndices(Σ)
-        i = r[1]
+    S1 = [sparse(1:N[j]-1, 1:N[j]-1, Vector{ComplexF64}(undef,N[j]-1), N[j]-1, N[j]-1) for i ∈ 1:2, j ∈ 1:2]
+    S2 = [sparse(1:N[j], 1:N[j], Vector{ComplexF64}(undef,N[j]), N[j], N[j]) for i ∈ 1:2, j ∈ 1:2]
+    for r ∈ CartesianIndices(S1)
         j = r[2]
-        Σ[i,j] = zeros(ComplexF64,length(dis.x[j]))
-        if bnd.bl[r] !== :none
-            for k ∈ eachindex(dis.x[j])
-                if sign(bnd.∂Ω_tr[i,j] - dis.x[j][k])*(-1)^i ≤ 0
-                     # Σ[i,j][k] = α[i,j]*(abs(dis.x[j][k]-bnd.∂Ω_tr[i,j]))^POWER_LAW
-                     u = abs(dis.x[j][k]-bnd.∂Ω_tr[i,j])/bnd.bl_depth[i,j]
-                     β = 2*sqrt(bnd.bl_depth[i,j])
-                     Σ[i,j][k] = α[i,j]*u*(exp(β*u)-1)/(exp(β)-1)
-                end
-            end
+        if sim.bnd.bl[r] ∈ [:pml_out, :pml_in]
+            S1[r] = sparse(1:N[j]-1, 1:N[j]-1, 1 ./(1 .+ 1im*(Σ[r][1:end-1] + Σ[r][2:end])/real(2k)), N[j]-1, N[j]-1)
+            S2[r] = sparse(1:N[j], 1:N[j], 1 ./(1 .+ 1im*Σ[r]/real(k)), N[j], N[j])
+        else
+            S1[r] = sparse(complex(1.,0)I, N[j]-1, N[j]-1)
+            S2[r] = sparse(complex(1.,0)I, N[j], N[j])
         end
     end
 
-    return Σ
-end
-function σ(sim::Simulation)
-    return σ(sim.bnd, sim.dis)
+    return S1, S2
 end

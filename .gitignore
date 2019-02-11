@@ -1,0 +1,12 @@
+# Don't track content of these folders
+tests/
+
+.DS_Store
+
+Manifest.toml
+Project.toml
+README.md
+
+TODO.list
+
+*.mem

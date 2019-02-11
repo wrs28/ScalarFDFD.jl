@@ -1,29 +1,33 @@
+#
+# is_in_subdomain::Array{TS2,1}
+# subdomain_params::Array{TSP,1}
+# subdomain_type::Array{Symbol,1}
+# subdomain_ε::Array{Function,1}
+# subdomain_F::Array{Function,1}
+# num_subdomains::Int
+
 ### DOMAIN STRUCT
-Base.show(io::IO, dom::Domain) = begin
-    print(io, typeof(dom), ": \n")
+function Base.show(io::IO, dom::Domain)
+    print(io, "Domain: \n")
     print(io, "\tDomain type: ", dom.domain_type, "\n")
     if dom.which_asymptote !== :none
         print(io, "\t\twaveguide: ", dom.which_waveguide,"\n")
         print(io, "\t\tasymptotic region: ", dom.which_asymptote, "\n")
     end
-    print(io, "\tdomain function: ", dom.is_in_domain, "\n")
-    print(IOContext(io, :typeinfo => Array{Float64}), "\tdomain params: ", dom.domain_params, "\n")
-    print(IOContext(io, :sub=>true), "\tdomain lattice: ", dom.lattice, "\n")
-    print(IOContext(io, :typeinfo => Array{Float64}), "\tbackground Re{n}: ", dom.n₁, "\n")
-    print(IOContext(io, :typeinfo => Array{Float64}), "\tbackground Im{n}: ", dom.n₂, "\n")
-    print(IOContext(io, :typeinfo => Array{Float64}), "\tbackground F: ", dom.F, "\n")
-    print(IOContext(io, :typeinfo => Array{Float64}), "\tRe{n} by region: ", dom.n₁_val[dom.n₁_idx], "\n")
-    print(IOContext(io, :typeinfo => Array{Float64}), "\tIm{n} by region: ", dom.n₂_val[dom.n₂_idx], "\n")
-    print(IOContext(io, :typeinfo => Array{Float64}), "\tF by region: ", dom.F_val[dom.F_idx], "\n")
-    print(IOContext(io, :typeinfo => Array{Function}), "\tregion functions: ", dom.is_in_region, "\n")
-    print(IOContext(io, :typeinfo => Array{Array{Float64,1},1}), "\tregion params: ", dom.region_params)
+    print(io, "\tdomain shape: ", dom.is_in_domain, "\n")
+    print(IOContext(io, :typeinfo => Dict), "\tdomain params: ", dom.domain_params, "\n")
+    print(IOContext(io, :sub=>true, :sub1=>true), "\tdomain lattice: ", dom.lattice, "\n")
+    print(IOContext(io, :typeinfo => Array{Function}), "\tbackground dielectric function: ", dom.domain_ε, "\n")
+    print(IOContext(io, :typeinfo => Array{Float64}), "\tbackground pump function : ", dom.domain_F, "\n")
+        print(IOContext(io, :typeinfo => Array{AbstractShape}), "\tsubdomain shapes: ", dom.is_in_subdomain, "\n")
+    print(IOContext(io, :typeinfo => Array{Dict{Symbol},1}), "\tsubdomain params: ", dom.subdomain_params)
 end
 
 
 ### SYSTEM STRUCT
-Base.show(io::IO, sys::System) = begin
+function Base.show(io::IO, sys::System)
     if !get(io, :sub, false)
-        print(io, typeof(sys), " with ", length(sys.domains), " domains: \n")
+        print(io, "System with ", length(sys.domains), " domains: \n")
     end
     domain_string = [["\tdomain ", i, " type: ", sys.domains[i].domain_type] for i ∈ eachindex(sys.domains)]
     asymptote_string = [[", ", sys.domains[i].which_asymptote] for i ∈ eachindex(sys.domains)]
@@ -56,52 +60,86 @@ end
 ### BOUNDARY STRUCT
 Base.show(io::IO, bnd::Boundary) = begin
     if !get(io, :sub, false)
-        print(io, typeof(bnd), ": \n")
+        print(io, "Boundary: \n")
     end
 
-    print(io, "\t\t-------------------------\n")
+    print(io, "\t\t\t-------------------------\n")
 
-    print(io, "\tbound.\t|\t   ", fmt("6s",bnd.bc[2,2]), "\t|\n")
-    print(io, "\tcond-\t|   ",fmt("6s",bnd.bc[1,1]), "\t   ", fmt("5s",bnd.bc[2,1]), "|\n")
-    print(io, "\t ition\t|\t   ", fmt("6s",bnd.bc[1,2]), "\t|\n")
+    print(io, "\tbound.\t|\t\t   ", fmt("6s",_get_b_symbol(bnd.bc[2][2])), "\t\t|\n")
+    print(io, "\tcond-\t|   ",fmt("6s",_get_b_symbol(bnd.bc[1][1])), "\t\t   ", fmt("5s",_get_b_symbol(bnd.bc[1][2])), "|\n")
+    print(io, "\t ition\t|\t\t   ", fmt("6s",_get_b_symbol(bnd.bc[2][1])), "\t\t|\n")
 
-    print(io, "\t\t-------------------------\n")
+    print(io, "\t\t\t-------------------------\n")
 
-    print(io, "\t\t|\t", fmt("+5.3f",bnd.∂Ω[2,2]), "\t\t|\n")
-    print(io, "\t∂Ω\t| ", fmt("+5.3f",bnd.∂Ω[1,1]), "\t", fmt("+5.3f",bnd.∂Ω[2,1]), "\t|\n")
-    print(io, "\t\t|\t", fmt("+5.3f",bnd.∂Ω[1,2]), "\t\t|\n")
+    print(io, "\t\t\t|\t\t", fmt("+5.3f",bnd.∂Ω[2][2]), "\t\t\t|\n")
+    print(io, "\t∂Ω\t\t| ", fmt("+5.3f",bnd.∂Ω[1][1]), "\t\t", fmt("+5.3f",bnd.∂Ω[1][2]), "\t|\n")
+    print(io, "\t\t\t|\t\t", fmt("+5.3f",bnd.∂Ω[2][1]), "\t\t\t|\n")
 
-    print(io, "\t\t-------------------------\n")
+    print(io, "\t\t\t-------------------------\n")
 
-    print(io, "\t\t|\t", fmt("+5.3f",bnd.∂Ω_tr[2,2]), "\t\t|\n")
-    print(io, "\t∂Ω_tr\t| ",fmt("+5.3f",bnd.∂Ω_tr[1,1]), "\t", fmt("+5.3f",bnd.∂Ω_tr[2,1]), "\t|\n")
-    print(io, "\t\t|\t", fmt("+5.3f",bnd.∂Ω_tr[1,2]), "\t\t|\n")
+    print(io, "\t\t\t|\t\t", fmt("+5.3f",bnd.∂Ω_tr[2][2]), "\t\t\t|\n")
+    print(io, "\t∂Ω_tr\t| ",fmt("+5.3f",bnd.∂Ω_tr[1][1]), "\t\t", fmt("+5.3f",bnd.∂Ω_tr[1][2]), "\t|\n")
+    print(io, "\t\t\t|\t\t", fmt("+5.3f",bnd.∂Ω_tr[2][1]), "\t\t\t|\n")
 
-    print(io, "\t\t-------------------------\n")
+    print(io, "\t\t\t-------------------------\n")
 
-    print(io, "\tbound.\t|\t", fmt("8s",bnd.bl[2,2]), "\t|\n")
-    print(io, "\tlayer\t|",fmt("8s",bnd.bl[1,1]), "\t", fmt("8s",bnd.bl[2,1]), "|\n")
-    print(io, "\t\t|\t", fmt("8s",bnd.bl[1,2]), "\t|\n")
+    print(io, "\tbound.\t|\t\t", fmt("8s",_get_b_symbol(bnd.bl[2][2])), "\t\t|\n")
+    print(io, "\tlayer\t|",fmt("8s",_get_b_symbol(bnd.bl[1][1])), "\t\t", fmt("8s",_get_b_symbol(bnd.bl[1][2])), "|\n")
+    print(io, "\t\t\t|\t\t", fmt("8s",_get_b_symbol(bnd.bl[2][1])), "\t\t|\n")
 
-    print(io, "\t\t-------------------------\n")
+    print(io, "\t\t\t-------------------------\n")
 
-    print(io, "\tbound.\t|\t", fmt("+5.3f",bnd.bl_depth[2,2]), "\t\t|\n")
-    print(io, "\tlayer\t| ",fmt("+5.3f",bnd.bl_depth[1,1]), "\t", fmt("+5.3f",bnd.bl_depth[2,1]), "\t|\n")
-    print(io, "\tdepth\t|\t", fmt("+5.3f",bnd.bl_depth[1,2]), "\t\t|\n")
+    print(io, "\tbound.\t|\t\t", fmt("+5.3f",bnd.bl[2][2].depth), "\t\t\t|\n")
+    print(io, "\tlayer\t| ",fmt("+5.3f",bnd.bl[1][1].depth), "\t\t", fmt("+5.3f",bnd.bl[1][2].depth), "\t|\n")
+    print(io, "\tdepth\t|\t\t", fmt("+5.3f",bnd.bl[2][1].depth), "\t\t\t|\n")
 
-    print(io, "\t\t-------------------------\n")
+    print(io, "\t\t\t-------------------------\n")
+end
+function _get_b_symbol(bcl::T) where T<:Union{AbstractBC,AbstractBL}
+    if T<:AbstractBC
+        if T<:PeriodicBC
+            return :p
+        elseif T<:RobinBC
+            return :r
+        elseif T<:DirichletBC
+            return :d
+        elseif T<:NeumannBC
+            return :n
+        elseif T<:MatchedBC
+            return :m
+        else
+            throw(ArgumentError("unrecognized boundary condition"))
+        end
+    else
+        if T<:PML
+            return :PML
+        elseif T<:cPML
+            return :cPML
+        elseif T<:noBL
+            return :none
+        else
+            throw(ArgumentError("unrecognized boundary layer"))
+        end
+    end
 end
 
 
 ### DISCRETIZATION STRUCT
 Base.show(io::IO, dis::Discretization) = begin
     if !get(io, :sub, false)
-        print(io, typeof(dis), ": \n")
+        print(io, "Discretization: \n")
     end
     print(io, "\tN: ", dis.N, "\n",
     # "\ttruncated N: ", dis.N_tr, "\n",
     "\tsub-pixel number: ", dis.sub_pixel_num, "\n",
-    "\tdx: ", dis.dx)
+    "\tdx: ", dis.dx, "\n")
+    if isCartesian(dis.coordinate_system)
+        print(io, "\tcoordinates: Cartesian")
+    elseif isPolar(dis.coordinate_system)
+        print(io, "\tcoordinates: Polar")
+    else
+        print(io, "\tcoordinates: ", dis.coordinate_system)
+    end
 end
 
 
@@ -111,7 +149,7 @@ Base.show(io::IO, chn::Channels) = begin
         print(io, "\t\twaveguide: ", chn.waveguide, "\n",
         "\t\tquantum number: ", chn.quantum_number)
     else
-        print(io, typeof(chn), ": \n")
+        print(io, "Channel: \n")
         print(io, "\twaveguide: ", chn.waveguide, "\n",
         "\tquantum number: ", chn.quantum_number, "\n")
         # if !isempty(chn.dispersion)
@@ -131,7 +169,7 @@ Base.show(io::IO, sct::Scattering) = begin
     plot_flag=false
     if !get(io, :sub, false)
         plot_flag = true
-        print(io, typeof(sct), " with ", length(sct.channels), " channels:\n")
+        print(io, "Scattering with ", length(sct.channels), " channels:\n")
     end
     temp = [["\n", sct.channels[i]] for i ∈ eachindex(sct.channels)]
     # if plot_flag && !isempty(sct.channels) && !isempty(sct.channels[1].dispersion)
@@ -168,7 +206,7 @@ end
 ### TWO-LEVEL-SYSTEM STRUCT
 Base.show(io::IO, tls::TwoLevelSystem) = begin
     if !get(io, :sub, false)
-        print(io, typeof(tls), ":\n")
+        print(io, "Two Level System:\n")
     end
     print(io, "\tD₀: ", tls.D₀, "\n",
     "\tω₀: ", tls.ω₀, "\n",
@@ -179,28 +217,13 @@ end
 ### SIMULATION STRUCT
 Base.show(io::IO, sim::Simulation) = begin
     print(IOContext(io, :sub=>true),
-    typeof(sim), ": \n\n",
-    "sys: ", sim.sys, "\n\n",
-    "bnd: ", sim.bnd, "\n\n",
-    "dis: ", sim.dis, "\n\n",
-    "sct: ", sim.sct, "\n\n",
-    "tls: ", sim.tls)
+    "Simulation : \n\n",
+    "sys: \n", sim.sys, "\n\n",
+    "bnd: \n", sim.bnd, "\n\n",
+    "dis: \n", sim.dis, "\n\n",
+    "sct: \n", sim.sct, "\n\n",
+    "tls: \n", sim.tls)
     if [sim.lat.a, sim.lat.b] !== [Inf,Inf]
-        print(io, "\n\nlat: ", sim.lat)
-    end
-end
-
-### BRAVAIS LATTICE STRUCT
-Base.show(io::IO, bvl::Bravais) = begin
-    if !get(io, :sub, false)
-        print(io, typeof(bvl), ": \n",
-        "\tprimitive vector 1: ", fmt("3.2f",bvl.a), ", ∠", fmt("3.2f",(mod2pi(bvl.α))*180/pi), "°\n",
-        "\tprimitive vector 2: ", fmt("3.2f",bvl.b), ", ∠", fmt("3.2f",(mod2pi(bvl.β))*180/pi), "°\n",
-        "\torigin: (", fmt("3.2f",bvl.x0), ", ", fmt("3.2f",bvl.y0), ")")
-    else
-        print(io,
-        "\n\t\tprimitive vector 1: ", fmt("3.2f",bvl.a), ", ∠", fmt("3.2f",(mod2pi(bvl.α))*180/pi), "°\n",
-        "\t\tprimitive vector 2: ", fmt("3.2f",bvl.b), ", ∠", fmt("3.2f",(mod2pi(bvl.β))*180/pi), "°\n",
-        "\t\torigin: (", fmt("3.2f",bvl.x0), ", ", fmt("3.2f",bvl.y0), ")")
+        print(IOContext(io, :sub=>true, :sub1=>false), "\n\nlat: ", sim.lat)
     end
 end

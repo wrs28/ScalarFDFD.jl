@@ -1,10 +1,10 @@
 name = "ScalarFDFD"
-uuid = "1501fb56-d95b-11e8-28b3-6dc6380aac00"
+uuid = "9b9a6760-2e16-11e9-17f4-29fa885e4df6"
 authors = ["William R Sweeney <wrsweeney2@gmail.com>"]
 version = "0.1.0"
 
 [deps]
-Arpack = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
+ArnoldiMethod = "ec485272-7323-5ecc-a04f-4719b315124d"
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 Formatting = "59287772-0a20-5a39-b81b-1366585eb4c0"
 Interpolations = "a98d9a8b-a2ab-59e6-89dd-64a1c18fca59"
@@ -20,4 +20,3 @@ Serialization = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
-UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"

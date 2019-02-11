@@ -1,54 +1,104 @@
 """
-    iswaveguide(domain::Domain)
+    isWaveguide(domain::Domain)
 """
-function iswaveguide(domain::Domain)
+function isWaveguide(domain::Domain)
     return domain.domain_type ∈ [:planar_waveguide, :planar_waveguide_background, :halfspace, :pc_waveguide, :pc_waveguide_background]
 end
 
 
 """
-    isbulkwaveguide(domain::Domain))
+    isBulkWaveguide(domain::Domain))
 """
-function isbulkwaveguide(domain::Domain)
+function isBulkWaveguide(domain::Domain)
     return domain.domain_type ∈ [:bulk_planar_waveguide_x, :bulk_planar_waveguide_y, :bulk_pc_waveguide_x, :bulk_pc_waveguide_y]
 end
 
 
 """
-    isbackground(domain::Domain)
+    isBackground(domain::Domain)
 """
-function isbackground(domain)
+function isBackground(domain)
     return domain.domain_type ∈ [:background, :planar_waveguide_background, :pc_waveguide_background]
 end
 
 
 """
-    isdefect(domain::Domain))
+    isDefect(domain::Domain))
 """
-function isdefect(domain::Domain)
-    return domain.domain_type ∈ [:defect, :site_defect, :line_defect_simple, :line_defect_periodic, :pc_waveguide]
+function isDefect(domain::Domain)
+    return domain.domain_type ∈ [:defect, :site_defect, :line_defect, :pc_waveguide]
 end
 
 
 """
-    ispc(dom::Domain)
+    isPC(dom::Domain)
 """
-function ispc(dom::Domain)
+function isPC(dom::Domain)
     return dom.domain_type ∈ [:pc, :pc_waveguide, :pc_waveguide_background]
 end
 
 
 """
-    isplanar(dom::Domain)
+    isPlanar(dom::Domain)
 """
-function isplanar(dom::Domain)
+function isPlanar(dom::Domain)
     return dom.domain_type ∈ [:planar_waveguide, :planar_waveguide_background, :bulk_planar_waveguide_x, :bulk_planar_waveguide_y]
 end
 
 
 """
-    ishalfspace(dom::Domain)
+    isHalfSpace(dom::Domain)
 """
-function ishalfspace(dom::Domain)
+function isHalfSpace(dom::Domain)
     return dom.domain_type ∈ [:halfspace_waveguide]
 end
+
+
+"""
+    isDirichlet(bc)
+"""
+isDirichlet(bc::DirichletBC) = true
+isDirichlet(bc) = false
+
+
+"""
+    isNeumann(bc)
+"""
+isNeumann(bc::NeumannBC) = true
+isNeumann(bc) = false
+
+
+"""
+    isOpen(bc)
+"""
+isMatched(bc::MatchedBC) = true
+isMatched(bc) = false
+
+
+"""
+    isPeriodic(bc)
+"""
+isPeriodic(bc::PeriodicBC) = true
+isPeriodic(bc) = false
+
+
+"""
+    isPMLout(bl)
+"""
+isPMLout(bl::PML) = true
+isPMLout(bl) = false
+
+
+"""
+    isPMLin(bl)
+"""
+isPMLin(bl::cPML) = true
+isPMLin(bl) = false
+
+
+"""
+    isNone(bl)
+"""
+
+isNone(bl::noBL) = true
+isNone(bl) = false
