@@ -1,18 +1,18 @@
 module SimulationDefinition
 
-using Bravais,
-CoordinateSystems,
-BoundaryConditions,
-DielectricFunctions,
+using ..Bravais,
+..CoordinateSystems,
+..BoundaryConditions,
+..DielectricFunctions,
+..Shapes,
 Formatting,
 Interpolations,
 IterTools,
 RecipesBase,
-Shapes,
 Statistics
 
-import BoundaryConditions: reorder, get_dim, get_side, apply_args
-import DifferentialOperators: _oc_bls
+import ..BoundaryConditions: reorder, get_dim, get_side, apply_args
+import ..DifferentialOperators: _oc_bls
 
 export Domain,
 System,

@@ -3,9 +3,9 @@ module BoundaryConditions
 const EXTINCTION = 1e-10 # extinction in PML layer
 const SCALING_ANGLE = .25 # phase in conductivity to accelerate evanscent decay
 
-using Bravais,
-CoordinateSystems,
-Formatting,
+using ..Bravais
+using ..CoordinateSystems
+using Formatting,
 LinearAlgebra,
 SparseArrays,
 SpecialFunctions
@@ -605,7 +605,7 @@ struct MatchedBC{DIM,SIDE,CS,FIN} <: AbstractBC{DIM,SIDE}
                 J1[idx] = i
                 I2[idx] = N[1]
                 J2[idx] = j
-                weights[idx] = exp(complex(0,m*(i-j)*dθ))/2π
+                weights[idx] = dθ*exp(complex(0,m*(i-j)*dθ))/2π
                 M_inds[idx] = midx
 
                 idx += 1
@@ -622,7 +622,7 @@ struct MatchedBC{DIM,SIDE,CS,FIN} <: AbstractBC{DIM,SIDE}
                 J1[idx] = i
                 I2[idx] = N[1]
                 J2[idx] = j
-                weights[idx] = exp(complex(0,m*(i-j)*dθ))/2π
+                weights[idx] = dθ*exp(complex(0,m*(i-j)*dθ))/2π
                 M_inds[idx] = midx
                 idx += 1
             end
@@ -651,13 +651,19 @@ struct MatchedBC{DIM,SIDE,CS,FIN} <: AbstractBC{DIM,SIDE}
     (mbc::MatchedBC{DIM,SIDE,CS,true})(args...; kwargs...) where {DIM,SIDE,CS} = mbc
 
     function (MBC::MatchedBC{1,2,Polar,FIN})(k,args...) where FIN
-        dkR = k*MBC.dx[1]/2
-        Hm = besselhx.(MBC.QNs,MBC.direction,k*MBC.xmax[1])
-        Hm₊ = besselhx.(MBC.QNs.+1,MBC.direction,k*MBC.xmax[1])
-        Hm₋ = besselhx.(MBC.QNs.-1,MBC.direction,k*MBC.xmax[1])
-        num = Hm + dkR*(Hm₋-Hm₊)
-        den = exp.((-1).^(MBC.direction.-1).*1.0im*dkR).*besselhx.(MBC.QNs,MBC.direction,k*MBC.xmax[1]-dkR)
-        return (num./den)
+        R = MBC.xmax[1]+MBC.dx[1]/2
+
+        Hm = besselhx.(MBC.QNs,MBC.direction,k*R)
+
+        Hm₋ = besselhx.(MBC.QNs.-1,MBC.direction,k*R)
+        Hm₊ = besselhx.(MBC.QNs.+1,MBC.direction,k*R)
+        Hm′ = (Hm₋-Hm₊)/2
+
+        αm = Hm′./Hm
+        kdR = k*MBC.dx[1]
+        num = 1 .+ αm*kdR/2
+        den = 1 .- αm*kdR/2
+        return num./den
     end
 
     Base.show(io::IO,::MatchedBC{DIM,SIDE}) where {DIM,SIDE} = print("MatchedBC{$DIM,$SIDE}")
@@ -692,8 +698,10 @@ apply_args(x::Tuple, args...;kwargs...) = map(x->apply_args(x, args...;kwargs...
 apply_args(x::Tuple{Tuple,Tuple}, args...;kwargs...) = map(x->apply_args(x, args...;kwargs...),x)
 apply_args(x, args...;kwargs...) = nothing
 apply_args(x::AbstractLocalBC, args...; N, kwargs...) = x(N; kwargs...)
-apply_args(x::PeriodicBC, args...; lattice, N, kwargs...) = x(lattice, N; kwargs...)
-apply_args(x::MatchedBC, coordinate_system::Type{CS}, args...; outgoing_qns, incoming_qns, N, kwargs...) where {CS<:CoordinateSystem} = x(outgoing_qns, incoming_qns, N, CS; kwargs...)
+apply_args(x::PeriodicBC{DIM,SIDE,false}, args...; lattice, N, kwargs...) where {DIM,SIDE} = x(lattice, N; kwargs...)
+apply_args(x::PeriodicBC{DIM,SIDE,true}, args...; lattice, N, kwargs...) where {DIM,SIDE}= x
+apply_args(x::MatchedBC{DIM,SIDE,CS1,false}, coordinate_system::Type{CS2}, args...; N, kwargs...) where {DIM,SIDE,CS1,CS2<:CoordinateSystem} = x(N, CS2; kwargs...)
+apply_args(x::MatchedBC{DIM,SIDE,CS1,true}, coordinate_system::Type{CS2}, args...; N, kwargs...) where {DIM,SIDE,CS1,CS2<:CoordinateSystem} = x
 # apply_args(x::AbstractBL, args...; Δ, kwargs...) = x(Δ)
 apply_args(x::noBL, args...; kwargs...) = x
 apply_args(x::AbstractBL, args...; depth::Number=x.depth, Δ, kwargs...) = x(depth,Δ)

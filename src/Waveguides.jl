@@ -8,12 +8,12 @@ add_planar_waveguides,
 add_pc_waveguide,
 add_pc_waveguides
 
-using Bravais,
-BoundaryConditions,
-Shapes,
-ConstructionToolsBase,
-SimulationDefinition,
-PhotonicCrystal
+using ...Bravais,
+...BoundaryConditions,
+...Shapes,
+...SimulationDefinition,
+..ConstructionToolsBase,
+..PhotonicCrystal
 
 include("waveguides_planar.jl")
 include("waveguides_halfspace.jl")

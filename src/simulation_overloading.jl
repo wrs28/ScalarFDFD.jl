@@ -110,13 +110,17 @@ boundary object for Simulation.
 
 `bl_depth` scalar or array of boundary layer depths
 # """
-function Boundary(;∂Ω=fill(NaN,4), bc::Type=DirichletBC, bl=noBL, depth::Real=0, r::Real=NaN)
+function Boundary(;∂Ω=fill(NaN,4), bc::Type=DirichletBC, bl=noBL, depth::Real=0, r::Real=NaN, kwargs...)
     if !isnan(r)
-# #         @assert typeof(bc)<:Symbol "type of bc is $(typeof(bc)). when radius is specified, bc must be Symbol"
-# #         @assert typeof(bl)<:Symbol "type of bl is $(typeof(bl)). when radius is specified, bl must be Symbol"
-# #         @assert typeof(bl_depth)<:Number "type of bl_depth is $(typeof(bl_depth)). when radius is specified, bl_depth must be Number"
+        @assert bc<:AbstractBC "type of bc is $bc. when radius is specified, bc must be a boundary condition"
+        @assert bl<:AbstractBL "type of bl is $bl. when radius is specified, bl must be a boundary layer"
         ∂Ω = (0, r, 0, 2π)
-        BCs = ( DirichletBC{1,1}(), bc{1,2}(), PeriodicBC{2,1}(BravaisLattice(b=2π)), PeriodicBC{2,2}(BravaisLattice(b=2π)) )
+        if bc<:MatchedBC
+            BC = bc{1,2}(kwargs[:outgoing_qns],kwargs[:incoming_qns])
+        else
+            BC = bc{1,2}(kwargs...)
+        end
+        BCs = ( DirichletBC{1,1}(), BC, PeriodicBC{2,1}(BravaisLattice(b=2π)), PeriodicBC{2,2}(BravaisLattice(b=2π)) )
         BLs = ( noBL{1,1}(0), bl{1,2}(depth), noBL{2,1}(0), noBL{2,2}(0) )
     else
         if bc == DirichletBC

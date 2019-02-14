@@ -1,11 +1,11 @@
 module PhotonicCrystal
 
-using Bravais,
-Shapes,
-DielectricFunctions,
-ConstructionToolsBase,
-SimulationDefinition,
-BoundaryConditions
+using ...Bravais,
+...Shapes,
+...DielectricFunctions,
+...SimulationDefinition,
+...BoundaryConditions,
+..ConstructionToolsBase
 
 export build_pc_domain,
 line_defect

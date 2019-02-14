@@ -4,13 +4,13 @@
 
 module DifferentialOperators
 
-using Bravais,
-BoundaryConditions,
-CoordinateSystems,
+using ..Bravais,
+..BoundaryConditions,
+..CoordinateSystems,
 LinearAlgebra,
 SparseArrays
 
-import BoundaryConditions: get_dim_side, get_dim, get_side, get_bc_type, reorder, apply_args
+import ..BoundaryConditions: get_dim_side, get_dim, get_side, get_bc_type, reorder, apply_args
 
 export laplacian
 
@@ -231,6 +231,10 @@ struct OperatorConstructor{ORD,DIM,CS,TBL1,TBL2,TBK,TB1,TB2,TOD}
     function (OC::OperatorConstructor{_1,DIM,CS,_3,_4,_5,_6,_7,_8})(BC::AbstractBC{DIM,1},args...) where {_1,DIM,CS,_3,_4,_5,_6,_7,_8}
         if typeof(BC)<:PeriodicBC
             @assert length(args)==4 "only $(length(args)) arguments passed. PeriodicBC necessitates 4 args: k, ka, kb, ind"
+            # ind_flag = args[4]==0 ? false : true
+            # ind_flag ? nothing : args[4]=1
+            # ind = args[4]
+            args[4]==0 ? args=(args[1:3]...,1) : nothing
             ind = args[4]
             i1,j1,i2,j2 = BC.I1[ind],BC.J1[ind],BC.I2[ind],BC.J2[ind]
         else
@@ -260,6 +264,7 @@ struct OperatorConstructor{ORD,DIM,CS,TBL1,TBL2,TBK,TB1,TB2,TOD}
     function (OC::OperatorConstructor{_1,DIM,CS,_3,_4,_5,_6,_7,_8})(BC::AbstractBC{DIM,2},args...) where {_1,DIM,CS,_3,_4,_5,_6,_7,_8}
         if typeof(BC)<:PeriodicBC
             @assert length(args)==4 "only $(length(args)) arguments passed. PeriodicBC necessitates 4 args: k, ka, kb, ind"
+            args[4]==0 ? args=(args[1:3]...,1) : nothing
             ind = args[4]
             i1,j1,i2,j2 = BC.I1[ind],BC.J1[ind],BC.I2[ind],BC.J2[ind]
         else
@@ -472,16 +477,19 @@ function boundary_op(OD::OperatorDefinition{ORD,DIM,CS},OC::OperatorConstructor,
     rcv = vcat(OC.bnd1,OC.bnd2)
 
     if typeof(OD.bcs[DIM][1])<:PeriodicBC
-        if args[4]==1
+        if args[4]==0
+            fs1 = map(x->((k,_...)->OD.bcs[DIM][1](k,args[1],args[2],1)[x]),1:length(OC.bnd1))
+            fs2 = map(x->((k,_...)->OD.bcs[DIM][2](k,args[1],args[2],1)[x]),1:length(OC.bnd2))
+        elseif args[4]==1
             fs1 = map(x->((k,κ)->OD.bcs[DIM][1](k,κ,args[2],1)[x]),1:length(OC.bnd1))
             fs2 = map(x->((k,κ)->OD.bcs[DIM][2](k,κ,args[2],1)[x]),1:length(OC.bnd2))
-        else
+        elseif args[4]==2
             fs1 = map(x->((k,κ)->OD.bcs[DIM][1](k,args[3],κ,2)[x]),1:length(OC.bnd1))
             fs2 = map(x->((k,κ)->OD.bcs[DIM][2](k,args[3],κ,2)[x]),1:length(OC.bnd2))
         end
     else
-        fs1 = map(x->(k->OD.bcs[DIM][1](k)[x]),1:length(OC.bnd1))
-        fs2 = map(x->(k->OD.bcs[DIM][2](k)[x]),1:length(OC.bnd2))
+        fs1 = map(x->((k,_...)->OD.bcs[DIM][1](k)[x]),1:length(OC.bnd1))
+        fs2 = map(x->((k,_...)->OD.bcs[DIM][2](k)[x]),1:length(OC.bnd2))
     end
     fs = vcat(fs1,fs2)
 

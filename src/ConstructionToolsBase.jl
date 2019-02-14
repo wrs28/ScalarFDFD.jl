@@ -1,9 +1,9 @@
 module ConstructionToolsBase
 
-using DielectricFunctions,
-Shapes,
-Bravais,
-SimulationDefinition
+using ...DielectricFunctions,
+...Shapes,
+...Bravais,
+...SimulationDefinition
 
 export Subdomains,
 add_subdomain,

@@ -13,9 +13,8 @@ add_planar_waveguides,
 add_pc_waveguide,
 add_pc_waveguides
 
-using ConstructionToolsBase,
-Shapes,
-PhotonicCrystal,
-Waveguides
+include("ConstructionToolsBase.jl"); using .ConstructionToolsBase
+include("PhotonicCrystal.jl"); using .PhotonicCrystal
+include("Waveguides.jl"); using .Waveguides
 
 end #module

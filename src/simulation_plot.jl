@@ -21,7 +21,7 @@ plots
 to turn off translucent effect, add optional argument `seriesalpha=0`
 vary type of plot with `seriestype`, e.g. `seriestype=:contour`
 """
-@recipe function f(sim::Simulation, ψ::Array; by=nothing, truncate=true)
+@recipe function f(sim::Simulation, ψ::AbstractArray; by=nothing, truncate=true)
     if 1 ∈ sim.dis.N
         (sim, ψ, by, truncate, 1)
     else
@@ -31,7 +31,7 @@ end
 
 
 # 1d plot
-@recipe function f(sim::Simulation, ψ::Array, by::Union{Function,Nothing}, truncate::Bool, dim1::Int)
+@recipe function f(sim::Simulation, ψ::AbstractArray, by::Union{Function,Nothing}, truncate::Bool, dim1::Int)
 
     (N, x_f_start, x_f_stop, x_f, x_t_start, x_t_stop, x_t,
         y_f_start, y_f_stop, y_f, y_t_start, y_t_stop, y_t,
@@ -199,7 +199,7 @@ end
 
 
 # 2d plot
-@recipe function f(sim::Simulation, ψ::Array{ComplexF64}, by::Union{Function,Nothing}, truncate::Bool, dim1::Int, dim2::Int)
+@recipe function f(sim::Simulation, ψ::AbstractArray, by::Union{Function,Nothing}, truncate::Bool, dim1::Int, dim2::Int)
 
     (N, x_f_start, x_f_stop, x_f, x_t_start, x_t_stop, x_t,
         y_f_start, y_f_stop, y_f, y_t_start, y_t_stop, y_t,
