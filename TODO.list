@@ -1,0 +1,46 @@
+Go through simulation_construction carefully, looking for the following:
+
+✅. are all methods consistent with new modularization?
+✅. are there auxilliary functions that should be removed and placed elsewhere?
+✅. make compatible with polar
+
+For polar:
+  ✅. For eigenvalue problems, need to pay attention to effect of radial scaling on source term (I think source just goes to sqrt(r)*source)
+  ✅. make sure pml works as expected
+
+Boundary matching
+  1. Start with 1d
+  2. Next polar, this will be the most relevant to RSMs
+  3. Next to quasi-1d waveguides
+
+probably skip photonic crystals for now
+
+
+Other modularization:
+  ✅. Linear EigenProblems, should be easily made consistent, orthogonality holds in same way with rescaled field
+  1b. NonLinear EigenProblems, should be easily made consistent, orthogonality holds in same way with rescaled field
+  ✅. Plotting should be broken down per module, or perhaps should just appear in SimulationTypes
+    ✅. Take care of rescaling when plotting Simulation types
+  ✅. SimulationTools for all constructors, will be messy but probably not hard to get working at all
+    a. PC
+    b. Waveguides
+  4. Break parallel apart and add to each module
+  5. BandStructure module
+  6. Dispersion module
+  7. Synthesis module
+  8. Analysis module, contains S-matrix?
+  9. Break pretty_printing apart as well
+  10. Make SALT a module
+  11. Define a susceptibility object which for now just loads to SALT module
+  12. Inhomogeneous problems, which uses Synthesis
+
+  I think that's it!
+
+
+Temporary path forward:
+1. fix up plots
+2. verify polar 2d
+3. verify 1d
+4. verify polar 1d
+5. verify pml's
+6. implement open boundary conditions for polar

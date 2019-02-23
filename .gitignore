@@ -1,12 +1,15 @@
-# Don't track content of these folders
-tests/
+## Don't track content of these folders
+#tests/
 
 .DS_Store
 
-Manifest.toml
-Project.toml
-README.md
+#Manifest.toml
+#Project.toml
+#README.md
 
-TODO.list
+#TODO.list
 
 *.mem
+*.ipynb
+*checkpoint.jl
+*.gif
