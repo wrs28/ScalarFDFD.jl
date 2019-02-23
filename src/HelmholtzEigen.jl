@@ -103,38 +103,41 @@ end
 
 
 NonlinearEigenproblems.contour_beyn(nep::NEP,disp_opt::Bool;params...)=contour_beyn(ComplexF64,nep,disp_opt;params...)
+# the same as NonlinearEigenproblems.contour_beyn but compatible with ProgressMeter, notice extra disp_opt argument to distinguish from main method
 function NonlinearEigenproblems.contour_beyn(::Type{T},
-                         nep::NEP,
-                         disp_opt::Bool;
-                         tol::Real=eps(real(T))*100,
-                         rank_tol::Real=sqrt(eps()),
-                         σ::Number=zero(complex(T)),
-                         displaylevel::Integer=0,
-                         linsolvercreator::Function=backslash_linsolvercreator,
-                         k::Integer=3, # Number of eigenvals to compute
-                         radius=1, # integration radius
-                         parallel::Bool = nprocs()>1,
-                         quad_method::Symbol= parallel ? :ptrapz_parallel : :ptrapz, # which method to run. :quadg, :quadg_parallel, :quadgk, :ptrapz, :ptrapz_parallel
-                         N::Integer=1000  # Nof quadrature nodes
-                         )where{T<:Number}
+                        nep::NEP,
+                        disp_opt::Bool;
+                        tol::Real=sqrt(eps(real(T))), # Note tol is quite high for this method
+                        σ::Number=zero(complex(T)),
+                        displaylevel::Integer=0,
+                        linsolvercreator::Function=backslash_linsolvercreator,
+                        neigs::Integer=2, # Number of wanted eigvals
+                        k::Integer=neigs+1, # Columns in matrix to integrate
+                        radius::Union{Real,Tuple,Array}=1, # integration radius
+                        quad_method::Symbol=:ptrapz, # which method to run. :quadg, :quadg_parallel, :quadgk, :ptrapz
+                        N::Integer=1000,  # Nof quadrature nodes
+                        errmeasure::Function =
+                        default_errmeasure(nep::NEP),
+                        sanity_check=true
+                        )where{T<:Number}
+
+    # Geometry
+    length(radius)==1 ? radius=(radius,radius) : nothing
+    g(t) = complex(radius[1]*cos(t),radius[2]*sin(t)) # ellipse
+    gp(t) = complex(-radius[1]*sin(t),radius[2]*cos(t)) # derivative
 
     n=size(nep,1);
-    Random.seed!(10); # Reproducability
-    Vh=Array{T,2}(randn(real(T),n,k)) # randn only works for real
-    temp = Array{T,2}(undef,n,k)
-
-    length(radius)==1 ? radius=(radius,radius) : nothing
-    function ggp(t)
-        sc = sincos(t)
-        g = complex(radius[1]*sc[1],radius[2]*sc[2])
-        gp = complex(-radius[1]*sc[2],radius[2]*sc[1])
-        return g,gp
-    end
 
     if (k>n)
-        println("k=",k," n=",n);
-        error("Cannot compute more eigenvalues than the size of the NEP with contour_beyn()");
+        error("Cannot compute more eigenvalues than the size of the NEP with contour_beyn() k=",k," n=",n);
     end
+    if (k<=0)
+        error("k must be positive, k=",k,
+        neigs==typemax(Int) ? ". The kwarg k must be set if you use neigs=typemax" : ".")
+    end
+
+    Random.seed!(10); # Reproducability
+    Vh=Array{T,2}(randn(real(T),n,k)) # randn only works for real
 
     function local_linsolve(λ::TT,V::Matrix{TT}) where {TT<:Number}
         @ifd(print("."))
@@ -145,38 +148,28 @@ function NonlinearEigenproblems.contour_beyn(::Type{T},
     end
 
     # Constructing integrands
-    function Tv!(λ,t)
-        t[:] = local_linsolve(T(λ),Vh)
-        return nothing
-    end
-    function f!(λ,dλ,t)
-        Tv!(λ,t)
-        t[:] = t*dλ
-        return nothing
-    end
+    Tv(λ) = local_linsolve(T(λ),Vh)
+    f(t) = Tv(g(t))*gp(t)
     @ifd(print("Computing integrals"))
 
-    local A0,A1
+
     pg = Progress(N; dt=.1, desc="Contour integration...")
+    local A0,A1
     if (quad_method == :quadg_parallel)
-        println(" using quadg_parallel")
-        #A0=quadg_parallel(f1,0,2*pi,N);
-        #A1=quadg_parallel(f2,0,2*pi,N);
+        @ifd(print(" using quadg_parallel"))
         error("disabled");
     elseif (quad_method == :quadg)
-        println(" using quadg")
-        #A0=quadg(f1,0,2*pi,N);
-        #A1=quadg(f2,0,2*pi,N);
+        @ifd(print(" using quadg"))
         error("disabled");
     elseif (quad_method == :ptrapz)
-        println(" using ptrapz")
-        (A0,A1)=ptrapz((ggp,f!),0,2*pi,N,temp,pg);
+        @ifd(print(" using ptrapz"))
+        (A0,A1)=ptrapz(f,g,0,2*pi,N,pg);
     elseif (quad_method == :ptrapz_parallel)
-        println(" using ptrapz_parallel")
+        @ifd(print(" using ptrapz_parallel"))
         channel = RemoteChannel(()->Channel{Bool}(pg.n+1),1)
         @sync begin
             @async begin
-                (A0,A1)=ptrapz_parallel((ggp,f!),0,2*pi,N,temp,channel);
+                (A0,A1)=ptrapz_parallel(f,g,0,2*pi,N,channel);
                 put!(channel,false)
             end
             @async while take!(channel)
@@ -184,61 +177,100 @@ function NonlinearEigenproblems.contour_beyn(::Type{T},
             end
         end
     elseif (quad_method == :quadgk)
-        println(" using quadgk")
-        # A0,tmp=quadgk(f1,0,2*pi,pg...,1,reltol=tol);
-        # A1,tmp=quadgk(f2,0,2*pi,pg...,2,reltol=tol);
         error("disabled");
     else
-        println()
-        error("Unknown quadrature method: "*String(quad_method));
+        error("Unknown quadrature method:"*String(quad_method));
     end
+    @ifd(println("."));
     # Don't forget scaling
     A0[:,:] = A0 ./(2im*pi);
     A1[:,:] = A1 ./(2im*pi);
 
-    println("Computing SVD prepare for eigenvalue extraction ")
+    @ifd(print("Computing SVD prepare for eigenvalue extraction "))
     V,S,W = svd(A0)
-    max_ind = findlast(S./minimum(S).>1/rank_tol)
-    if isnothing(max_ind)
-        @warn "Rank not revealed, contour likely encloses too many eigenvalues. Try increasing k"
-        max_ind=k
-    end
-    V0, W0, S0 = V[:,1:max_ind], W[:,1:max_ind], S[1:max_ind]
-    B = (V0'*A1*W0)*diagm(0 => 1 ./S0[:])
+    V0 = V[:,1:k]
+    W0 = W[:,1:k]
+    B = (copy(V0')*A1*W0) * Diagonal(1 ./ S[1:k])
 
-    println("Computing eigenvalues ")
-    λ,v=eigen(B)
+    rank_drop_tol=tol;
+    p = count( S/S[1] .> rank_drop_tol);
+
+    @ifd(println(" p=",p));
+
+    # Extract eigenval and eigvec approximations according to
+    # step 6 on page 3849 in the reference
+    @ifd(println("Computing eigenvalues "))
+    λ,VB=eigen(B)
     λ[:] = λ .+ σ
 
-    println("Computing eigenvectors ")
-    return (λ,V0*v)
+    @ifd(println("Computing eigenvectors "))
+    V = V0 * VB;
+    for i = 1:k
+        normalize!(V[:,i]);
+    end
+
+    if (!sanity_check)
+        sorted_index = sortperm(map(x->abs(σ-x), λ));
+        return (λ[sorted_index],V[:,sorted_index])
+    end
+
+    # Compute all the errors
+    errmeasures=zeros(real(T),k);
+    for i = 1:k
+        errmeasures[i]=errmeasure(λ[i],V[:,i]);
+    end
+
+    good_index=findall(errmeasures .< tol);
+
+    # Index vector for sorted to distance from σ
+    sorted_good_index=
+        good_index[sortperm(map(x->abs(σ-x), λ[good_index]))];
+
+    # Remove all eigpairs not sufficiently accurate
+    # and potentially eigenvalues we do not want.
+    local Vgood,λgood
+    if( size(sorted_good_index,1) > neigs)
+        @ifd(println("Removing unwanted eigvals: neigs=",neigs,"<",size(sorted_good_index,1),"=found_eigvals"))
+        Vgood=V[:,sorted_good_index[1:neigs]];
+        λgood=λ[sorted_good_index[1:neigs]];
+    else
+        Vgood=V[:,sorted_good_index];
+        λgood=λ[sorted_good_index];
+    end
+
+    if (p==k)
+        @warn "Rank-drop not detected, your eigvals may be correct, but the algorithm cannot verify. Try to increase k." S
+    end
+
+    if (size(λgood,1)<neigs  && neigs < typemax(Int))
+        @warn "We found less eigvals than requested. Try increasing domain, or decreasing `tol`." S
+    end
+
+    return (λgood,Vgood)
 end
 
 # Trapezoidal rule for a periodic function f
-function ptrapz((ggp,f!),a,b,N,temp,pg)
+function ptrapz(f,g,a,b,N,pg)
     h = (b-a)/N
     t = range(a, stop = b-h, length = N)
-    S = [zero(temp),zero(temp)]
+    S0 = zero(f(t[1])); S1 = zero(S0)
     for i = 1:N
-        g, gp = ggp(t[i])
-        f!(g,gp,temp)
-        S[1][:] = S[1] + temp
-        S[2][:] = S[2] + temp*g
+        temp = f(t[i])
+        S0 += temp
+        S1 += temp*g(t[i])
         next!(pg)
     end
-    return h*S[1], h*S[2];
+    return h*S0, h*S1;
 end
-# parallel Trapezoidal rule for a periodic function f
-function ptrapz_parallel((ggp,f!),a,b,N,temp,channel)
+
+
+function ptrapz_parallel(f,g,a,b,N,channel)
     h = (b-a)/N
     t = range(a, stop = b-h, length = N)
-    S = [zero(temp),zero(temp)]
     S = @distributed (+) for i = 1:N
-        temp = copy(temp)
-        g, gp = ggp(t[i])
-        f!(g,gp,temp)
+        temp = f(t[i])
         put!(channel,true)
-        [temp,temp*g]
+        [temp,temp*g(t[i])]
     end
     return h*S[1], h*S[2];
 end
