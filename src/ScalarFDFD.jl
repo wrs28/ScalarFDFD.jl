@@ -1,13 +1,13 @@
 module ScalarFDFD
 
-include("Bravais.jl"); using .Bravais
+using Bravais
 export BravaisLattice
 
-include("CoordinateSystems.jl"); using .CoordinateSystems
+using CoordinateSystems
 export Polar,
 Cartesian
 
-include("BoundaryConditions.jl"); using .BoundaryConditions
+using BoundaryConditions
 export PML,
 cPML,
 noBL,
@@ -17,9 +17,9 @@ RobinBC,
 PeriodicBC,
 MatchedBC
 
-include("DielectricFunctions.jl"); using .DielectricFunctions
+using DielectricFunctions
 
-include("Shapes.jl"); using .Shapes
+using Shapes
 export Circle,
 Ellipse,
 Square,
@@ -27,9 +27,9 @@ Rectangle,
 Parallelogram,
 Universe
 
-include("DifferentialOperators.jl"); using .DifferentialOperators
+using DifferentialOperators
 
-include("SimulationDefinition.jl"); using .SimulationDefinition
+using SimulationDefinition
 export Domain,
 System,
 Discretization,
@@ -39,7 +39,7 @@ Scattering,
 TwoLevelSystem,
 Simulation
 
-include("ConstructionTools.jl"); using .ConstructionTools
+using ConstructionTools
 export Subdomains,
 add_subdomain,
 build_domain,
@@ -53,7 +53,7 @@ add_planar_waveguides,
 add_pc_waveguide,
 add_pc_waveguides
 
-include("HelmholtzEigen.jl"); using .HelmholtzEigen
+using HelmholtzEigen
 export eig_kl,
 eig_cf,
 eig_knl
