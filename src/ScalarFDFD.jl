@@ -29,7 +29,7 @@ Universe
 
 using DifferentialOperators
 
-using SimulationDefinition
+using DefineSimulation
 export Domain,
 System,
 Discretization,
